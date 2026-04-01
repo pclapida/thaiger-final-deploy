@@ -17,14 +17,18 @@ export default function Home() {
 
   useEffect(() => {
     const fetchHomeProducts = async () => {
-        // Pedimos 8 productos aleatorios (limitados a los ultimos subidos por simplicidad técnica)
-        const { data, error } = await supabase.from('products').select('*').limit(8).order('id', { ascending: false });
-        if (data && data.length >= 8) {
-            setProductosDestacados(data.slice(0, 4));
-            setProductosPromociones(data.slice(4, 8));
-        } else if (data) {
-            setProductosDestacados(data.slice(0, 4));
-            setProductosPromociones(data.slice(0, 4));
+        // Destacados: últimos 4 productos
+        const { data: featuredData } = await supabase.from('products').select('*').limit(4).order('id', { ascending: false });
+        if (featuredData) setProductosDestacados(featuredData);
+        
+        // Promociones: productos en oferta real
+        const { data: saleData } = await supabase.from('products').select('*').eq('is_on_sale', true).limit(4);
+        if (saleData && saleData.length > 0) {
+            setProductosPromociones(saleData);
+        } else if (featuredData) {
+            // Fallback si no hay ofertas activas: los primeros 4
+            const { data: fallback } = await supabase.from('products').select('*').limit(4).order('price1', { ascending: false });
+            setProductosPromociones(fallback || []);
         }
     };
     fetchHomeProducts();

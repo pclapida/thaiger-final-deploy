@@ -86,7 +86,7 @@ export default function Dashboard() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: ''
+    name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0
   });
 
   // ========= CRUD OPERACIONES (SUPABASE) =========
@@ -113,7 +113,9 @@ export default function Dashboard() {
       price1: product.price1 || 0,
       price2: product.price2 || 0,
       price3: product.price3 || 0,
-      image_url: product.image_url || ''
+      image_url: product.image_url || '',
+      is_on_sale: product.is_on_sale || false,
+      discount_percent: product.discount_percent || 0
     });
     setIsModalOpen(true);
   };
@@ -121,7 +123,7 @@ export default function Dashboard() {
   const handleAddNew = () => {
     setEditingProduct(null);
     setImageFile(null);
-    setFormData({ name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '' });
+    setFormData({ name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0 });
     setIsModalOpen(true);
   };
 
@@ -314,7 +316,10 @@ export default function Dashboard() {
                     {filteredProducts.map((p) => (
                        <tr key={p.id} className="border-b border-gray-800 hover:bg-black/50 transition-colors">
                           <td className="px-6 py-4">#{p.id}</td>
-                          <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={p.name}>{p.name}</td>
+                          <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={p.name}>
+                            {p.name}
+                            {p.is_on_sale && <span className="ml-2 bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase">-{p.discount_percent}%</span>}
+                          </td>
                           <td className="px-6 py-4 hidden md:table-cell">{p.brand}</td>
                           <td className="px-6 py-4 hidden sm:table-cell">
                              <span className="bg-gray-800 text-gray-300 px-2 py-1 rounded text-[10px] uppercase font-bold border border-gray-700">
@@ -322,7 +327,21 @@ export default function Dashboard() {
                              </span>
                           </td>
                           <td className="px-6 py-4 font-bold text-orange-500">{formatPrice(p.price1)}</td>
-                          <td className="px-6 py-4 text-right space-x-2">
+                          <td className="px-6 py-4 text-right space-x-2 flex items-center justify-end">
+                             <button 
+                               onClick={async () => {
+                                 const newVal = !p.is_on_sale;
+                                 const { error } = await supabase.from('products').update({ is_on_sale: newVal }).eq('id', p.id);
+                                 if (!error) {
+                                   setProducts(products.map(x => x.id === p.id ? {...x, is_on_sale: newVal} : x));
+                                   toast.success(newVal ? 'Producto en oferta' : 'Oferta retirada');
+                                 }
+                               }}
+                               className={`text-[9px] px-2 py-1.5 rounded font-bold uppercase tracking-wider transition-colors ${p.is_on_sale ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-white'}`}
+                               title="Toggle Oferta"
+                             >
+                               {p.is_on_sale ? 'EN OFERTA' : 'SIN OFERTA'}
+                             </button>
                              <button onClick={() => handleEdit(p)} className="text-blue-500 hover:text-blue-400 p-2 bg-blue-500/10 rounded transition-colors" title="Editar">
                                 <Edit size={16} />
                              </button>
@@ -466,6 +485,39 @@ export default function Dashboard() {
                         <DollarSign size={16} className="absolute left-3 top-3.5 text-gray-500" />
                         <input type="number" step="0.01" value={formData.price3} onChange={e => setFormData({...formData, price3: Number(e.target.value)})} className="w-full pl-10 bg-[#0A0A0A] border border-gray-700 p-3 rounded-sm text-white focus:border-orange-500 focus:outline-none" />
                     </div>
+                 </div>
+
+                 {/* === SECCIÓN DE OFERTAS === */}
+                 <div className="md:col-span-2 bg-red-900/10 border border-red-800/30 rounded-lg p-4 space-y-4">
+                    <h3 className="text-sm font-bold uppercase text-red-400 tracking-widest">Configuración de Oferta</h3>
+                    <div className="flex items-center gap-4">
+                       <label className="relative inline-flex items-center cursor-pointer">
+                         <input 
+                           type="checkbox" 
+                           checked={formData.is_on_sale} 
+                           onChange={e => setFormData({...formData, is_on_sale: e.target.checked})} 
+                           className="sr-only peer" 
+                         />
+                         <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                       </label>
+                       <span className="text-sm font-bold text-gray-300">{formData.is_on_sale ? 'EN OFERTA' : 'Sin oferta'}</span>
+                    </div>
+                    {formData.is_on_sale && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-gray-500">Porcentaje de Descuento (%)</label>
+                        <input 
+                          type="number" 
+                          min="1" max="90" 
+                          value={formData.discount_percent} 
+                          onChange={e => setFormData({...formData, discount_percent: Number(e.target.value)})} 
+                          className="w-32 bg-[#0A0A0A] border border-red-700 p-3 rounded-sm text-red-400 font-bold focus:border-red-500 focus:outline-none" 
+                          placeholder="15"
+                        />
+                        {formData.price1 > 0 && formData.discount_percent > 0 && (
+                          <p className="text-xs text-gray-400">Precio final: <span className="text-red-400 font-bold">{formatPrice(formData.price1 * (1 - formData.discount_percent/100))}</span> <span className="line-through text-gray-600">{formatPrice(formData.price1)}</span></p>
+                        )}
+                      </div>
+                    )}
                  </div>
 
                  <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-800 flex justify-end gap-4">
