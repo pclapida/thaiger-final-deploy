@@ -26,13 +26,20 @@ export const CartProvider = ({ children }) => {
     setCartItems(prev => {
       const existingItem = prev.find(item => item.id === product.id);
       if (existingItem) {
+        // Enforce stock limit on existing item
+        const newQuantity = existingItem.quantity + quantity;
+        const finalQuantity = product.stock !== undefined ? Math.min(newQuantity, product.stock) : newQuantity;
+        
         return prev.map(item => 
           item.id === product.id 
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: finalQuantity }
             : item
         );
       }
-      return [...prev, { ...product, quantity }];
+      
+      // Enforce stock limit on new item
+      const finalQuantity = product.stock !== undefined ? Math.min(quantity, product.stock) : quantity;
+      return [...prev, { ...product, quantity: finalQuantity }];
     });
   };
 
@@ -40,14 +47,18 @@ export const CartProvider = ({ children }) => {
     setCartItems(prev => prev.filter(item => item.id !== productId));
   };
 
-  const updateQuantity = (productId, newQuantity) => {
+  const updateQuantity = (productId, newQuantity, stock) => {
     if (newQuantity < 1) {
        removeFromCart(productId);
        return;
     }
+
+    // Enforce stock limit if stock is provided
+    const finalQuantity = stock !== undefined ? Math.min(newQuantity, stock) : newQuantity;
+
     setCartItems(prev => 
       prev.map(item => 
-        item.id === productId ? { ...item, quantity: newQuantity } : item
+        item.id === productId ? { ...item, quantity: finalQuantity } : item
       )
     );
   };

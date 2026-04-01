@@ -60,27 +60,43 @@ export default function Cart() {
 
               {cartItems.map((item) => (
                 <div key={item.id} className="flex flex-col sm:flex-row items-center bg-[#111] p-4 rounded-sm border border-gray-800 hover:border-gray-700 transition-colors">
-                  <div className="w-full sm:w-32 h-32 bg-gray-900 flex-shrink-0 mb-4 sm:mb-0 sm:mr-6 p-2 relative flex items-center justify-center">
-                    <span className="text-gray-700 font-bold opacity-30 select-none">FOTO</span>
+                  <div className="w-full sm:w-32 h-32 bg-white rounded flex-shrink-0 mb-4 sm:mb-0 sm:mr-6 p-2 relative flex items-center justify-center overflow-hidden">
+                    {item.image_url ? (
+                      <img 
+                        src={item.image_url} 
+                        alt={item.name} 
+                        className="w-full h-full object-contain mix-blend-multiply" 
+                      />
+                    ) : (
+                      <span className="text-gray-300 font-bold opacity-30 select-none uppercase text-[10px]">Sin Imagen</span>
+                    )}
                   </div>
 
                   <div className="flex-1 flex flex-col md:flex-row justify-between items-start md:items-center w-full">
                     <div className="mb-4 md:mb-0">
                       <p className="text-orange-500 text-xs font-bold uppercase tracking-widest mb-1">{item.brand}</p>
                       <h3 className="text-lg font-bold uppercase">{item.name}</h3>
-                      <p className="text-gray-400 text-sm mt-1">Precio actual: {formatPrice(getActivePrice(item))}</p>
+                      <div className="flex flex-col gap-1 mt-1">
+                        <p className="text-gray-400 text-sm">Precio: {formatPrice(getActivePrice(item))}</p>
+                        {item.stock !== undefined && (
+                          <p className={`text-[10px] uppercase font-bold ${item.stock < 5 ? 'text-red-500' : 'text-gray-500'}`}>
+                            Disponibles: {item.stock} unidades
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between w-full md:w-auto md:gap-8">
                       <div className="flex items-center border border-gray-700 bg-[#0A0A0A]">
                         <button 
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.id, item.quantity - 1, item.stock)}
                           className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 transition"
                         ><Minus size={16}/></button>
                         <span className="px-4 font-bold">{item.quantity}</span>
                         <button 
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                          disabled={item.stock !== undefined && item.quantity >= item.stock}
+                          onClick={() => updateQuantity(item.id, item.quantity + 1, item.stock)}
+                          className={`p-2 transition ${item.stock !== undefined && item.quantity >= item.stock ? 'text-gray-800 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
                         ><Plus size={16}/></button>
                       </div>
                       

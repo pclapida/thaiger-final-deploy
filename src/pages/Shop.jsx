@@ -47,10 +47,15 @@ export default function Shop() {
     }, []);
 
     useEffect(() => {
-        if (location.state?.brand) {
+        if (location.state?.brand && products.length > 0) {
+            // Find the actual casing in the data
+            const actualBrand = [...new Set(products.map(p => p.brand))].find(
+                b => b?.toLowerCase() === location.state.brand.toLowerCase()
+            );
+
             setSelectedFilters(prev => ({
                 ...prev,
-                brand: [location.state.brand]
+                brand: actualBrand ? [actualBrand] : [location.state.brand]
             }));
             window.history.replaceState({}, document.title);
         }
@@ -62,7 +67,7 @@ export default function Shop() {
             }));
             window.history.replaceState({}, document.title);
         }
-    }, [location.state]);
+    }, [location.state, products]);
 
     const handleFilterChange = (filterType, item) => {
         setSelectedFilters(prev => {
@@ -78,7 +83,8 @@ export default function Shop() {
     const filteredProducts = useMemo(() => {
         const result = products.filter(product => {
             const categoryMatch = selectedFilters.category.length === 0 || selectedFilters.category.includes(product.category);
-            const brandMatch = selectedFilters.brand.length === 0 || selectedFilters.brand.includes(product.brand);
+            const brandMatch = selectedFilters.brand.length === 0 || 
+                               selectedFilters.brand.some(b => b.toLowerCase() === (product.brand || "").toLowerCase());
 
             let priceMatch = selectedFilters.price.length === 0;
             if (selectedFilters.price.length > 0) {
