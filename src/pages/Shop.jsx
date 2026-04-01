@@ -138,13 +138,21 @@ export default function Shop() {
                         <SlidersHorizontal className="h-5 w-5" /> Filtrar Productos
                     </button>
 
+                    {/* Overlay backdrop for mobile */}
+                    {isSidebarOpen && (
+                        <div
+                            className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+                            onClick={() => setIsSidebarOpen(false)}
+                        />
+                    )}
+
                     <aside
-                        className={`fixed lg:static top-0 left-0 h-full w-64 lg:w-72 bg-[#111] lg:bg-transparent shadow-2xl lg:shadow-none z-40 p-6 lg:p-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 overflow-y-auto`}
+                        className={`fixed lg:static top-0 left-0 h-full w-72 lg:w-72 bg-[#111] lg:bg-transparent shadow-2xl lg:shadow-none z-50 p-6 lg:p-0 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 overflow-y-auto`}
                     >
-                        <div className="flex justify-between items-center mb-6 lg:hidden">
+                        <div className="flex justify-between items-center mb-6 lg:hidden pt-2">
                             <h2 className="text-xl font-bold text-orange-500">Filtros</h2>
-                            <button onClick={() => setIsSidebarOpen(false)} className="text-white hover:text-orange-500">
-                                <X className="h-6 w-6" />
+                            <button onClick={() => setIsSidebarOpen(false)} className="text-white hover:text-orange-500 p-2">
+                                <X className="h-7 w-7" />
                             </button>
                         </div>
 
