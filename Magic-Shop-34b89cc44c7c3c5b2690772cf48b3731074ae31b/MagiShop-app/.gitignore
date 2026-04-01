@@ -1,0 +1,12 @@
+# Node/React
+frontend/node_modules/
+frontend/dist/
+
+# PHP/XAMPP environment
+/vendor/
+.env
+config/config.local.php
+
+# OS
+.DS_Store
+Thumbs.db

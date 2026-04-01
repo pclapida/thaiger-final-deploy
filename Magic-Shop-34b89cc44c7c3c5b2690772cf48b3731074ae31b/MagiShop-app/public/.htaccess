@@ -1,0 +1,10 @@
+RewriteEngine On
+RewriteBase /MagiShop/public/
+
+# Ensure Authorization header is available to PHP
+SetEnvIf Authorization ".+" HTTP_AUTHORIZATION=$0
+
+# Redirect everything to index.php (SPA)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto de Equilibrio - Micromovilidad</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; text-align: center; padding: 20px; }
+        .contenedor-grafica { width: 85%; max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+    <h2>Análisis de Punto de Equilibrio</h2>
+    <p>Proyecto: Ecosistema de Micromovilidad (Proyección a 12 meses)</p>
+
+    <div class="contenedor-grafica">
+        <canvas id="graficaPE"></canvas>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('graficaPE').getContext('2d');
+
+        // Línea de tiempo proyectada
+        const etiquetas = ['Inicio', 'Mes 2', 'Mes 4', 'Mes 6', 'Mes 8', 'Mes 9 (Punto de Equilibrio)', 'Mes 10', 'Mes 12'];
+
+        // 1. Costos Fijos: $740,640 (Se mantienen constantes todo el año)
+        const costosFijos = [740640, 740640, 740640, 740640, 740640, 740640, 740640, 740640];
+
+        // 2. Costos Totales: Empiezan en los fijos y suman los variables progresivamente hasta $925,800
+        const costosTotales = [740640, 771500, 802360, 833220, 864080, 879510, 894940, 925800];
+
+        // 3. Ventas (Ingresos): Crecen desde cero hasta tu meta de $1,203,540 (ROI 30%)
+        const ventas = [0, 200590, 401180, 601770, 802360, 902655, 1002950, 1203540];
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: etiquetas,
+                datasets: [
+                    {
+                        label: 'Ventas (Ingresos)',
+                        data: ventas,
+                        borderColor: '#28a745', // Verde
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Costos Totales',
+                        data: costosTotales,
+                        borderColor: '#dc3545', // Rojo
+                        borderWidth: 3,
+                        borderDash: [5, 5],
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Costos Fijos',
+                        data: costosFijos,
+                        borderColor: '#ffc107', // Amarillo
+                        borderWidth: 2,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': $' + context.raw.toLocaleString('es-MX');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Dinero ($ USD/MXN)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Tiempo de Operación' }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

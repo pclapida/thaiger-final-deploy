@@ -1,0 +1,14 @@
+@import "tailwindcss";  /* <--- EN LA VERSIÓN 4, SOLO NECESITAS ESTO */
+
+/* --- CSS EXTRA PARA EL LOGIN --- */
+body, html, #root {
+  height: 100%;
+  width: 100%;
+  background-color: black; 
+}
+
+/* Estilos manuales que usaba el Login */
+.login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: black; }
+.login-card { width: 100%; max-width: 400px; padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 20px; }
+.input-thaiger { width: 100%; background-color: #000; border: 1px solid rgba(255,255,255,0.5); border-radius: 20px; color: white; text-align: center; padding: 12px; }
+.claw-piece { position: absolute; background-color: black; border-color: #ff8c00; box-shadow: 0 0 15px rgba(255,140,0,0.6); }
