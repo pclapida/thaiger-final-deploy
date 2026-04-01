@@ -113,7 +113,7 @@ export default function Footer() {
       
       {/* BARRA INFERIOR */}
       <div className="border-t border-gray-900 mt-8 pt-8 text-center text-[10px] text-gray-700 uppercase tracking-widest">
-         Designed by Thaiger Devs • 2025
+         Desarrollado y Diseñado por JHP • 2025
       </div>
     </footer>
   );

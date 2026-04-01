@@ -423,8 +423,8 @@ export default function Dashboard() {
 
       {/* === MODAL DE EDICIÓN/CREACIÓN === */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-           <div className="bg-[#111] border border-gray-800 p-8 rounded-xl w-full max-w-2xl relative shadow-2xl shadow-black">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-24 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
+           <div className="bg-[#111] border border-gray-800 p-8 rounded-xl w-full max-w-2xl relative shadow-2xl shadow-black mb-10">
               
               <button 
                   onClick={() => setIsModalOpen(false)}
