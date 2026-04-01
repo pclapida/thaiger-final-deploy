@@ -39,16 +39,27 @@ export default function Checkout() {
 
         setIsProcessing(true);
         try {
-            const { data: orderData, error: orderError } = await supabase.from('orders').insert({
+            // 1. Create the Order
+            const { data: createdOrders, error: orderError } = await supabase.from('orders').insert({
                 user_id: user.uid,
                 total: total,
                 shipping_info: formData,
                 payment_info: { method: 'SPEI', concepto: speiData.concepto, banco: speiData.banco },
                 status: 'Pago Pendiente'
-            }).select().single();
+            }).select();
 
-            if (orderError) throw orderError;
+            if (orderError) {
+                console.error("Error al crear orden en Supabase:", orderError);
+                throw new Error(`Error en tabla de pedidos: ${orderError.message}`);
+            }
 
+            if (!createdOrders || createdOrders.length === 0) {
+                throw new Error("No se pudo obtener la confirmación del pedido (posible problema de permisos).");
+            }
+
+            const orderData = createdOrders[0];
+
+            // 2. Prepare and create the Order Items
             const orderItems = cartItems.map(item => ({
                 order_id: orderData.id,
                 product_id: item.id,
@@ -58,23 +69,33 @@ export default function Checkout() {
             }));
 
             const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-            if (itemsError) throw itemsError;
-
-            // Reducir stock de cada producto comprado
-            for (const item of cartItems) {
-                await supabase.rpc('decrement_stock', { product_id: item.id, qty: item.quantity }).catch(() => {
-                    // Fallback: update manual si la función RPC no existe
-                    supabase.from('products').update({ stock: Math.max(0, (item.stock || 10) - item.quantity) }).eq('id', item.id);
-                });
+            if (itemsError) {
+                console.error("Error al insertar artículos del pedido:", itemsError);
+                throw new Error(`Error al guardar productos: ${itemsError.message}`);
             }
 
-            toast.success(`¡Pedido Registrado!\nTrasfiere con concepto ${speiData.concepto}`, { duration: 8000 });
+            // 3. Update stock for each product
+            for (const item of cartItems) {
+                try {
+                   const { error: rpcError } = await supabase.rpc('decrement_stock', { product_id: item.id, qty: item.quantity });
+                   if (rpcError) {
+                       // Fallback: update manual si la función RPC falla o no existe
+                       await supabase.from('products')
+                         .update({ stock: Math.max(0, (item.stock || 0) - item.quantity) })
+                         .eq('id', item.id);
+                   }
+                } catch (stockErr) {
+                    console.warn(`No se pudo actualizar stock de ${item.id}:`, stockErr);
+                }
+            }
+
+            toast.success(`¡Pedido Registrado!\nTransfiere con concepto ${speiData.concepto}`, { duration: 8000 });
             clearCart();
             navigate('/profile');
             
         } catch (error) {
-            console.error("Error al procesar pedido:", error);
-            toast.error("Hubo un error de base de datos. Intenta de nuevo.");
+            console.error("Detalle del error de compra:", error);
+            toast.error(error.message || "Hubo un error de base de datos. Intente de nuevo.", { duration: 6000 });
         } finally {
             setIsProcessing(false);
         }

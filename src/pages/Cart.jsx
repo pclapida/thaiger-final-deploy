@@ -92,7 +92,19 @@ export default function Cart() {
                           onClick={() => updateQuantity(item.id, item.quantity - 1, item.stock)}
                           className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 transition"
                         ><Minus size={16}/></button>
-                        <span className="px-4 font-bold">{item.quantity}</span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max={item.stock}
+                          value={item.quantity}
+                          onChange={(e) => {
+                            let val = parseInt(e.target.value);
+                            if (isNaN(val) || val < 1) val = 1;
+                            if (item.stock !== undefined && val > item.stock) val = item.stock;
+                            updateQuantity(item.id, val, item.stock);
+                          }}
+                          className="w-12 bg-transparent text-center font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
                         <button 
                           disabled={item.stock !== undefined && item.quantity >= item.stock}
                           onClick={() => updateQuantity(item.id, item.quantity + 1, item.stock)}
