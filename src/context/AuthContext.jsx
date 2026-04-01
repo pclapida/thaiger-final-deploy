@@ -38,10 +38,12 @@ export const AuthProvider = ({ children }) => {
           
         let role = 'user';
         let name = sbUser.user_metadata?.name || 'Usuario Thaiger';
+        let avatar_url = sbUser.user_metadata?.avatar_url || null;
 
         if (userDoc) {
           role = userDoc.role || 'user';
           if (userDoc.name) name = userDoc.name;
+          if (userDoc.avatar_url) avatar_url = userDoc.avatar_url;
         }
 
         setIsAuthenticated(true);
@@ -51,6 +53,7 @@ export const AuthProvider = ({ children }) => {
           email: sbUser.email,
           name: name,
           role: role,
+          avatar_url: avatar_url
         });
       } catch (err) {
         console.error("Error al obtener perfil desde public.users", err);
@@ -61,6 +64,7 @@ export const AuthProvider = ({ children }) => {
           email: sbUser.email,
           name: sbUser.user_metadata?.name || 'Usuario Thaiger',
           role: 'user',
+          avatar_url: sbUser.user_metadata?.avatar_url || null
         });
       }
     } else {
@@ -107,6 +111,39 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const updateProfile = async (updates) => {
+    try {
+      // 1. Update Supabase Auth metadata
+      const { data: authData, error: authError } = await supabase.auth.updateUser({
+        data: {
+          name: updates.name || user.name,
+          avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : user.avatar_url
+        }
+      });
+      if (authError) throw authError;
+
+      // 2. Update public.users table
+      const { error: dbError } = await supabase.from('users').update({
+        name: updates.name || user.name,
+        avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : user.avatar_url
+      }).eq('id', user.uid);
+      if (dbError) throw dbError;
+
+      // 3. Update local state immediately
+      setCurrentUser(authData.user);
+      setUser(prev => ({
+        ...prev,
+        name: updates.name || prev.name,
+        avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : prev.avatar_url
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      return { success: false, error };
+    }
+  };
+
   const logout = async () => {
     return supabase.auth.signOut();
   };
@@ -116,7 +153,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, currentUser, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, currentUser, login, register, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

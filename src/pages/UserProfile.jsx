@@ -10,13 +10,13 @@ import ProductCard from '../components/ProductCard';
 // Los pedidos falsos (DUMMY_ORDERS) han sido removidos. Se implementará conexión con base de datos.
 
 export default function UserProfile() {
-    const { currentUser, user } = useAuth();
+    const { currentUser, user, updateProfile } = useAuth();
     const { wishlistItems } = useWishlist();
     const [activeTab, setActiveTab] = useState('pedidos');
     
     // Estado para "Detalles de Cuenta"
-    const [displayName, setDisplayName] = useState(user?.name || currentUser?.user_metadata?.name || '');
-    const [photoURL, setPhotoURL] = useState(currentUser?.user_metadata?.avatar_url || '');
+    const [displayName, setDisplayName] = useState(user?.name || '');
+    const [photoURL, setPhotoURL] = useState(user?.avatar_url || '');
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateMsg, setUpdateMsg] = useState('');
 
@@ -45,24 +45,18 @@ export default function UserProfile() {
         e.preventDefault();
         setIsUpdating(true);
         setUpdateMsg('');
-        try {
-            const { error: authError } = await supabase.auth.updateUser({
-                data: {
-                    name: displayName,
-                    avatar_url: photoURL
-                }
-            });
-            if (authError) throw authError;
+        
+        const result = await updateProfile({
+            name: displayName,
+            avatar_url: photoURL
+        });
 
-            // También actualizamos public.users
-            if (user?.uid) {
-                await supabase.from('users').update({ name: displayName }).eq('id', user.uid);
-            }
-            
-            setUpdateMsg('¡Perfil actualizado con éxito! (Refresca para ver los cambios)');
-        } catch (error) {
-            setUpdateMsg('Error al actualizar: ' + error.message);
+        if (result.success) {
+            setUpdateMsg('¡Perfil actualizado con éxito!');
+        } else {
+            setUpdateMsg('Error al actualizar: ' + result.error.message);
         }
+        
         setIsUpdating(false);
     };
 
@@ -87,8 +81,8 @@ export default function UserProfile() {
                 {/* Encabezado del Perfil */}
                 <div className="flex items-center gap-6 mb-12 border-b border-gray-800 pb-8">
                     <div className="w-24 h-24 bg-gray-900 rounded-full flex items-center justify-center border-2 border-orange-500 overflow-hidden relative group shrink-0">
-                        {currentUser?.user_metadata?.avatar_url || currentUser?.photoURL ? (
-                            <img src={currentUser?.user_metadata?.avatar_url || currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                        {user?.avatar_url ? (
+                            <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                             <User size={40} className="text-gray-400" />
                         )}

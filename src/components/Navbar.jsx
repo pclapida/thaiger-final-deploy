@@ -116,8 +116,8 @@ export default function Navbar() {
               <div className="flex items-center gap-3">
                 <Link to="/profile">
                   <motion.button whileHover={{ scale: 1.1, color: '#ff8c00' }} className="flex items-center justify-center p-0.5 rounded-full bg-gray-900 border border-gray-700 hover:border-orange-500 transition-colors overflow-hidden h-9 w-9">
-                    {currentUser?.photoURL ? (
-                      <img src={currentUser.photoURL} alt="User Settings" className="w-full h-full object-cover rounded-full" />
+                    {user?.avatar_url ? (
+                      <img src={user.avatar_url} alt="User Settings" className="w-full h-full object-cover rounded-full" />
                     ) : (
                       <User className="h-5 w-5 m-auto" />
                     )}
