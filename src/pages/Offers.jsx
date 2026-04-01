@@ -74,6 +74,7 @@ export default function Offers() {
                                     </div>
                                 }
                                 category={offer.category}
+                                stock={offer.stock}
                             />
                             <div className="absolute -top-3 -right-3 bg-red-600 text-white font-black px-3 py-1 rounded-full border-2 border-black z-30 shadow-lg transform rotate-12">
                                 -{discount}%

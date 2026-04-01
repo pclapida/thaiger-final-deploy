@@ -220,7 +220,8 @@ export default function Shop() {
                                         details={product.name}
                                         price={formatPrice(product.price1)}
                                         category={product.category}
-                                        image={product.image_url} 
+                                        image={product.image_url}
+                                        stock={product.stock}
                                     />
                                 ))}
                             </div>

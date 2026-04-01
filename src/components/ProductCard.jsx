@@ -4,7 +4,8 @@ import { ShoppingBag, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWishlist } from '../context/WishlistContext';
 
-export default function ProductCard({ id, brand, category, details, price, image, delay = 0 }) {
+export default function ProductCard({ id, brand, category, details, price, image, delay = 0, stock }) {
+  const outOfStock = stock !== undefined && stock !== null && stock <= 0;
   // Si no pasamos ID, usamos 1 por defecto para que no falle el link
   const productId = id || 1;
   const { toggleWishlist, isInWishlist } = useWishlist();
@@ -47,10 +48,17 @@ export default function ProductCard({ id, brand, category, details, price, image
 
           {/* Botón "Añadir Rápido" */}
           <motion.div
-            className="absolute bottom-0 left-0 w-full bg-orange-600 text-white text-center py-3 font-bold uppercase translate-y-full group-hover:translate-y-0 transition-transform duration-300"
+            className={`absolute bottom-0 left-0 w-full text-white text-center py-3 font-bold uppercase translate-y-full group-hover:translate-y-0 transition-transform duration-300 ${outOfStock ? 'bg-gray-600' : 'bg-orange-600'}`}
           >
-            Ver Detalles
+            {outOfStock ? 'Agotado' : 'Ver Detalles'}
           </motion.div>
+
+          {/* Overlay AGOTADO */}
+          {outOfStock && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+              <span className="bg-red-600 text-white font-black text-sm px-4 py-2 rounded-full uppercase tracking-widest">Agotado</span>
+            </div>
+          )}
         </div>
 
         {/* Textos */}

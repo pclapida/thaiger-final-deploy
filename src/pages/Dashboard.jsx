@@ -86,7 +86,7 @@ export default function Dashboard() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0
+    name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0, stock: 10
   });
 
   // ========= CRUD OPERACIONES (SUPABASE) =========
@@ -115,7 +115,8 @@ export default function Dashboard() {
       price3: product.price3 || 0,
       image_url: product.image_url || '',
       is_on_sale: product.is_on_sale || false,
-      discount_percent: product.discount_percent || 0
+      discount_percent: product.discount_percent || 0,
+      stock: product.stock ?? 10
     });
     setIsModalOpen(true);
   };
@@ -123,7 +124,7 @@ export default function Dashboard() {
   const handleAddNew = () => {
     setEditingProduct(null);
     setImageFile(null);
-    setFormData({ name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0 });
+    setFormData({ name: '', brand: '', category: '', price1: 0, price2: 0, price3: 0, image_url: '', is_on_sale: false, discount_percent: 0, stock: 10 });
     setIsModalOpen(true);
   };
 
@@ -309,6 +310,7 @@ export default function Dashboard() {
                       <th className="px-6 py-4 hidden md:table-cell">Marca</th>
                       <th className="px-6 py-4 hidden sm:table-cell">Categoría</th>
                       <th className="px-6 py-4">Precio 1</th>
+                      <th className="px-6 py-4 hidden lg:table-cell">Stock</th>
                       <th className="px-6 py-4 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -327,6 +329,11 @@ export default function Dashboard() {
                              </span>
                           </td>
                           <td className="px-6 py-4 font-bold text-orange-500">{formatPrice(p.price1)}</td>
+                          <td className="px-6 py-4 hidden lg:table-cell">
+                             <span className={`font-bold text-sm ${p.stock <= 0 ? 'text-red-500' : p.stock <= 5 ? 'text-yellow-500' : 'text-green-500'}`}>
+                                {p.stock ?? '?'}
+                             </span>
+                          </td>
                           <td className="px-6 py-4 text-right space-x-2 flex items-center justify-end">
                              <button 
                                onClick={async () => {
@@ -460,6 +467,12 @@ export default function Dashboard() {
                     {formData.image_url && !imageFile && (
                         <p className="text-xs text-green-500 mt-2">Imagen actual enlazada validada.</p>
                     )}
+                 </div>
+
+                 {/* Stock */}
+                 <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-gray-500">Stock (Unidades) *</label>
+                    <input type="number" min="0" value={formData.stock} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} className="w-full bg-[#0A0A0A] border border-gray-700 p-3 rounded-sm text-green-400 font-bold focus:border-orange-500 focus:outline-none" required />
                  </div>
 
                  {/* Precios escalonados */}

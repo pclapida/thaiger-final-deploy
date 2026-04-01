@@ -152,26 +152,33 @@ export default function ProductDetails() {
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-start gap-4">
                 <Package className="text-white h-10 w-10 flex-shrink-0" />
                 <div>
-                    <h4 className="font-bold text-lg text-white mb-1">Disponible en Inventario</h4>
-                    <p className="text-gray-400 text-sm">Tiempo de entrega varia segun el tipo de compra Menudeo/Mayoreo.</p>
+                    <h4 className="font-bold text-lg text-white mb-1">{productData.stock > 0 ? 'Disponible en Inventario' : 'Producto Agotado'}</h4>
+                    <p className="text-gray-400 text-sm">
+                      {productData.stock > 0 
+                        ? `${productData.stock} unidades disponibles. Tiempo de entrega varía según el tipo de compra.`
+                        : 'Este producto se encuentra temporalmente agotado. Vuelve pronto.'
+                      }
+                    </p>
                 </div>
             </div>
 
             <div className="flex gap-4 mt-4">
                 <button 
                   onClick={handleAddToCart}
-                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${added ? 'bg-green-500 text-white' : 'bg-white text-black hover:bg-gray-200'}`}
+                  disabled={productData.stock <= 0}
+                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${productData.stock <= 0 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : added ? 'bg-green-500 text-white' : 'bg-white text-black hover:bg-gray-200'}`}
                 >
-                    {added ? '¡Añadido!' : 'Añadir al Carrito'}
+                    {productData.stock <= 0 ? 'Agotado' : added ? '¡Añadido!' : 'Añadir al Carrito'}
                 </button>
                 <button 
                   onClick={() => {
                       addToCart(productData);
                       navigate('/cart');
                   }}
-                  className="flex-1 bg-orange-600 text-white font-bold uppercase py-4 hover:bg-orange-700 transition-colors rounded-sm shadow-[0_0_15px_rgba(255,140,0,0.4)]"
+                  disabled={productData.stock <= 0}
+                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${productData.stock <= 0 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-[0_0_15px_rgba(255,140,0,0.4)]'}`}
                 >
-                    Comprar Ahora
+                    {productData.stock <= 0 ? 'Sin Stock' : 'Comprar Ahora'}
                 </button>
                 <button 
                   onClick={() => toggleWishlist(productData)}

@@ -60,6 +60,14 @@ export default function Checkout() {
             const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
             if (itemsError) throw itemsError;
 
+            // Reducir stock de cada producto comprado
+            for (const item of cartItems) {
+                await supabase.rpc('decrement_stock', { product_id: item.id, qty: item.quantity }).catch(() => {
+                    // Fallback: update manual si la función RPC no existe
+                    supabase.from('products').update({ stock: Math.max(0, (item.stock || 10) - item.quantity) }).eq('id', item.id);
+                });
+            }
+
             toast.success(`¡Pedido Registrado!\nTrasfiere con concepto ${speiData.concepto}`, { duration: 8000 });
             clearCart();
             navigate('/profile');

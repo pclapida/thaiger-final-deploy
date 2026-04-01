@@ -113,6 +113,7 @@ export default function Home() {
                 price={`$${prod.price1}`} 
                 category={prod.category}
                 image={prod.image_url} 
+                stock={prod.stock}
              />
           )) : <div className="col-span-4 text-center text-gray-500">Cargando destacados...</div>}
         </div>
@@ -139,6 +140,7 @@ export default function Home() {
                    ) : `$${prod.price1}`}
                    category={prod.category}
                    image={prod.image_url} 
+                   stock={prod.stock}
                 />
                 {isOnSale && (
                   <div className="absolute -top-3 -right-3 bg-red-600 text-white font-black px-3 py-1 rounded-full border-2 border-black z-30 shadow-lg transform rotate-12">
