@@ -124,30 +124,20 @@ export default function Home() {
         <h3 className="text-center text-gray-300 uppercase tracking-[0.2em] text-sm font-bold mb-10">Promociones</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {productosPromociones.length > 0 ? productosPromociones.map((prod, index) => {
-            const isOnSale = prod.is_on_sale && prod.discount_percent > 0;
-            const salePrice = isOnSale ? (prod.price1 * (1 - prod.discount_percent / 100)).toFixed(2) : null;
             return (
-              <div key={prod.id} className="relative">
-                <ProductCard 
-                   id={prod.id} 
-                   brand={prod.brand} 
-                   details={prod.name} 
-                   price={isOnSale ? (
-                     <div className="flex items-center gap-2 justify-center mt-2">
-                       <span className="text-gray-500 line-through text-sm">${prod.price1}</span>
-                       <span className="text-orange-500 font-extrabold text-xl">${salePrice}</span>
-                     </div>
-                   ) : `$${prod.price1}`}
-                   category={prod.category}
-                   image={prod.image_url} 
-                   stock={prod.stock}
-                />
-                {isOnSale && (
-                  <div className="absolute -top-3 -right-3 bg-red-600 text-white font-black px-3 py-1 rounded-full border-2 border-black z-30 shadow-lg transform rotate-12">
-                    -{prod.discount_percent}%
-                  </div>
-                )}
-              </div>
+              <ProductCard 
+                 key={prod.id}
+                 id={prod.id} 
+                 brand={prod.brand} 
+                 details={prod.name} 
+                 price={prod.price1}
+                 category={prod.category}
+                 image={prod.image_url} 
+                 stock={prod.stock}
+                 delay={index}
+                 isOnSale={prod.is_on_sale}
+                 discountPercent={prod.discount_percent}
+              />
             );
           }) : <div className="col-span-4 text-center text-gray-500">Cargando promociones...</div>}
         </div>

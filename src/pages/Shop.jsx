@@ -232,10 +232,12 @@ export default function Shop() {
                                         delay={index % 4}
                                         brand={product.brand}
                                         details={product.name}
-                                        price={formatPrice(product.price1)}
+                                        price={product.price1}
                                         category={product.category}
                                         image={product.image_url}
                                         stock={product.stock}
+                                        isOnSale={product.is_on_sale}
+                                        discountPercent={product.discount_percent}
                                     />
                                 ))}
                             </div>

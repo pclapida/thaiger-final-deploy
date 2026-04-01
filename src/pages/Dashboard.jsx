@@ -338,10 +338,17 @@ export default function Dashboard() {
                              <button 
                                onClick={async () => {
                                  const newVal = !p.is_on_sale;
-                                 const { error } = await supabase.from('products').update({ is_on_sale: newVal }).eq('id', p.id);
+                                 const defaultDiscount = (newVal && (p.discount_percent <= 0 || !p.discount_percent)) ? 15 : p.discount_percent;
+                                 
+                                 const { error } = await supabase.from('products')
+                                   .update({ is_on_sale: newVal, discount_percent: defaultDiscount })
+                                   .eq('id', p.id);
+
                                  if (!error) {
-                                   setProducts(products.map(x => x.id === p.id ? {...x, is_on_sale: newVal} : x));
-                                   toast.success(newVal ? 'Producto en oferta' : 'Oferta retirada');
+                                   setProducts(products.map(x => x.id === p.id ? {...x, is_on_sale: newVal, discount_percent: defaultDiscount} : x));
+                                   toast.success(newVal ? `Producto en oferta (${defaultDiscount}%)` : 'Oferta retirada');
+                                 } else {
+                                   toast.error("Error al actualizar oferta");
                                  }
                                }}
                                className={`text-[9px] px-2 py-1.5 rounded font-bold uppercase tracking-wider transition-colors ${p.is_on_sale ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-white'}`}
