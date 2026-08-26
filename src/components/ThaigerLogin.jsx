@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Importamos el contexto
+import { useAuth } from '../context/AuthContext';
+import { IS_LOCAL_MODE, DEMO_ADMIN } from '../services/api';
 import toast from 'react-hot-toast';
 
 export default function ThaigerLogin() {
@@ -19,21 +20,26 @@ export default function ThaigerLogin() {
     setIsTearing(true);
 
     try {
-      // 1. Iniciar sesión en Firebase (el AuthContext actualizará el estado global automáticamente)
+      // El AuthContext actualiza el estado global en cuanto la sesión se abre.
       await login(email, password);
 
       toast.success('¡Bienvenido a Thaiger!');
-      // 2. Redirigir al Home o al Perfil
       navigate('/');
     } catch (error) {
       setIsTearing(false);
-      if (error.message.includes('Invalid login') || error.message.includes('credentials') || error.message.includes('not found')) {
+      const message = error?.message || '';
+      if (message.includes('Invalid login') || message.includes('credentials') || message.includes('not found')) {
         toast.error('Correo o contraseña incorrectos.');
       } else {
         toast.error('Ocurrió un error al iniciar sesión.');
         console.error(error);
       }
     }
+  };
+
+  const fillDemoAdmin = () => {
+    setEmail(DEMO_ADMIN.email);
+    setPassword(DEMO_ADMIN.password);
   };
 
   return (
@@ -72,6 +78,24 @@ export default function ThaigerLogin() {
                   Ingresar
                 </button>
               </form>
+
+              {IS_LOCAL_MODE && (
+                <div style={{ marginTop: '20px', background: 'rgba(234,88,12,0.08)', border: '1px solid rgba(234,88,12,0.35)', borderRadius: '4px', padding: '14px', textAlign: 'left' }}>
+                  <p style={{ color: '#ea580c', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
+                    Modo local — cuenta de administrador
+                  </p>
+                  <p style={{ color: '#999', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
+                    {DEMO_ADMIN.email} / {DEMO_ADMIN.password}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={fillDemoAdmin}
+                    style={{ marginTop: '10px', background: 'transparent', border: '1px solid #444', color: '#ccc', padding: '6px 12px', borderRadius: '2px', cursor: 'pointer', fontSize: '11px', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '1px' }}
+                  >
+                    Rellenar datos
+                  </button>
+                </div>
+              )}
 
               <div style={{ marginTop: '20px', borderTop: '1px solid #222', paddingTop: '20px' }}>
                 <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '5px' }}>¿No tienes cuenta?</p>

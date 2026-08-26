@@ -2,68 +2,107 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ProductCard from '../components/ProductCard';
-import { Package, ArrowLeft, Heart, Star } from 'lucide-react';
+import { Package, ArrowLeft, Heart, Star, Minus, Plus } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { supabase } from '../supabase';
+import { products as productsApi } from '../services/api';
+import { formatPrice, getDisplayPrice, getTierBasePrice, hasDiscount, getDiscountPercent } from '../lib/pricing';
 
-const formatPrice = (price) => {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
-};
+const REVIEWS_KEY = 'thaiger_reviews';
+
+/** Las opiniones se guardan por producto en el navegador. */
+function loadReviews(productId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(REVIEWS_KEY) || '{}');
+    return Array.isArray(all[productId]) ? all[productId] : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveReviews(productId, reviews) {
+  try {
+    const all = JSON.parse(localStorage.getItem(REVIEWS_KEY) || '{}');
+    all[productId] = reviews;
+    localStorage.setItem(REVIEWS_KEY, JSON.stringify(all));
+  } catch (error) {
+    console.error('No se pudieron guardar las opiniones:', error);
+  }
+}
 
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
-  const { currentUser } = useAuth();
-  
+  const { user } = useAuth();
+
   const [productData, setProductData] = useState(null);
   const [recommended, setRecommended] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState(1);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const [added, setAdded] = useState(false);
-  const [reviews, setReviews] = useState([
-    { id: 1, user: "Carlos M.", text: "Excelente calidad, muy recomendado.", rating: 5, date: "10/01/2026" },
-    { id: 2, user: "Ana G.", text: "Buen sabor y resultados.", rating: 4, date: "15/02/2026" }
-  ]);
+  const [reviews, setReviews] = useState(() => loadReviews(id));
   const [newReview, setNewReview] = useState('');
   const [newRating, setNewRating] = useState(5);
 
+  // Al pasar de un producto a otro se reinicia todo durante el render,
+  // en lugar de encadenar setState dentro de un efecto.
+  const [loadedId, setLoadedId] = useState(id);
+  if (loadedId !== id) {
+    setLoadedId(id);
+    setLoading(true);
+    setProductData(null);
+    setRecommended([]);
+    setQuantity(1);
+    setImageFailed(false);
+    setAdded(false);
+    setReviews(loadReviews(id));
+  }
+
   useEffect(() => {
+    let active = true;
     window.scrollTo(0, 0);
-    const fetchData = async () => {
-        setLoading(true);
-        // Traer el producto actual
-        const { data: currData } = await supabase.from('products').select('*').eq('id', id).single();
-        if (currData) {
-            setProductData(currData);
-            
-            // Traer 2 recomendados de la misma marca
-            const { data: recData } = await supabase.from('products').select('*').eq('brand', currData.brand).neq('id', id).limit(2);
-            if (recData && recData.length > 0) {
-                setRecommended(recData);
-            } else {
-                // Si no hay de la misma marca, traer 2 cualquiera
-                const { data: randomData } = await supabase.from('products').select('*').neq('id', id).limit(2);
-                setRecommended(randomData || []);
-            }
+
+    Promise.all([productsApi.get(id), productsApi.list()])
+      .then(([current, list]) => {
+        if (!active) return;
+        setProductData(current);
+
+        if (current) {
+          const sameBrand = list.filter(
+            (p) => p.brand === current.brand && String(p.id) !== String(current.id)
+          );
+          const others = list.filter((p) => String(p.id) !== String(current.id));
+          setRecommended((sameBrand.length > 0 ? sameBrand : others).slice(0, 2));
         }
-        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('No se pudo cargar el producto:', error);
+        if (active) setProductData(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
     };
-    fetchData();
   }, [id]);
 
   const handleAddToCart = () => {
-      addToCart(productData);
+      addToCart(productData, quantity);
       setAdded(true);
+      toast.success(`${quantity} x ${productData.name} en el carrito`);
       setTimeout(() => setAdded(false), 1500);
   };
 
   const handleAddReview = () => {
-      if (!currentUser) {
+      if (!user) {
           toast.error("Debes iniciar sesión para opinar.");
           return;
       }
@@ -71,16 +110,20 @@ export default function ProductDetails() {
           toast.error("Por favor escribe una opinión.");
           return;
       }
-      const newReviewObj = {
-          id: Date.now(),
-          user: currentUser.displayName || currentUser.email?.split('@')[0] || "Usuario",
-          text: newReview,
+      const nextReviews = [
+        {
+          id: `${Date.now()}`,
+          user: user.name || user.email?.split('@')[0] || 'Usuario',
+          text: newReview.trim(),
           rating: newRating,
-          date: new Date().toLocaleDateString()
-      };
-      setReviews([newReviewObj, ...reviews]);
+          date: new Date().toLocaleDateString('es-MX')
+        },
+        ...reviews
+      ];
+      setReviews(nextReviews);
+      saveReviews(id, nextReviews);
       setNewReview('');
-      setTimeout(() => toast.success("¡Gracias por tu opinión!"), 300);
+      toast.success("¡Gracias por tu opinión!");
   };
 
   if (loading) {
@@ -104,16 +147,22 @@ export default function ProductDetails() {
       );
   }
 
+  const listPrice = getTierBasePrice(productData, 1);
+  const finalPrice = getDisplayPrice(productData);
+  const discounted = hasDiscount(productData);
+  const stock = Number(productData.stock);
+  const hasStockInfo = Number.isFinite(stock);
+  const outOfStock = hasStockInfo && stock <= 0;
+  const maxQuantity = hasStockInfo && stock > 0 ? stock : 99;
+
   const productInfo = {
     brand: productData.brand,
     name: productData.name,
-    price: formatPrice(productData.price1),
     category: productData.category,
     image: productData.image_url,
-    description: productData.description && productData.description.length > 10 
-      ? productData.description 
+    description: productData.description && productData.description.length > 10
+      ? productData.description
       : `Potente suplemento de categoría ${productData.category} diseñado en los laboratorios de ${productData.brand} para atletas de clase mundial. Resultados efectivos con la mejor pureza del mercado.`,
-    stock: true,
     features: [
       { title: "Calidad Garantizada", desc: "Producto sellado y 100% original." },
       { title: "Categoría", desc: productData.category },
@@ -130,16 +179,17 @@ export default function ProductDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-16">
           <div className="w-full h-[500px] bg-white rounded-2xl flex items-center justify-center relative overflow-hidden group shadow-2xl shadow-white/5">
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none z-10"></div>
-            {productInfo.image ? (
-                <img 
-                    src={productInfo.image} 
-                    alt={productInfo.name} 
+            {productInfo.image && !imageFailed ? (
+                <img
+                    src={productInfo.image}
+                    alt={productInfo.name}
                     className="w-full h-full object-contain mix-blend-multiply drop-shadow-2xl hover:scale-110 transition-transform duration-700 ease-out"
-                    onError={(e) => {e.target.style.display = 'none'; e.target.previousSibling.style.display = 'flex';}} 
+                    onError={() => setImageFailed(true)}
                 />
             ) : (
-                <div className="relative z-10 text-orange-500 flex flex-col items-center gap-4">
-                     <span className="text-sm font-bold tracking-widest uppercase text-center bg-black/50 p-4 rounded-xl">Imagen en Descarga...</span>
+                <div className="relative z-10 text-gray-400 flex flex-col items-center gap-4">
+                     <Package size={72} className="opacity-40" />
+                     <span className="text-xs font-bold tracking-widest uppercase text-center text-gray-500">Sin fotografía</span>
                 </div>
             )}
           </div>
@@ -147,38 +197,90 @@ export default function ProductDetails() {
           <div className="flex flex-col justify-center space-y-6">
             <h3 className="text-gray-400 font-bold tracking-widest uppercase text-lg">{productInfo.brand}</h3>
             <h1 className="text-5xl font-extrabold uppercase leading-tight">{productInfo.name}</h1>
-            <p className="text-orange-500 text-4xl font-bold">{productInfo.price}</p>
-            
+
+            <div className="flex items-end gap-4 flex-wrap">
+                <p className="text-orange-500 text-4xl font-bold">{formatPrice(finalPrice)}</p>
+                {discounted && (
+                    <>
+                        <span className="text-gray-500 line-through text-xl">{formatPrice(listPrice)}</span>
+                        <span className="bg-red-600 text-white font-black px-3 py-1 rounded-sm uppercase text-xs tracking-wider">
+                            -{getDiscountPercent(productData)}% OFF
+                        </span>
+                    </>
+                )}
+            </div>
+
             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-start gap-4">
                 <Package className="text-white h-10 w-10 flex-shrink-0" />
                 <div>
-                    <h4 className="font-bold text-lg text-white mb-1">{productData.stock > 0 ? 'Disponible en Inventario' : 'Producto Agotado'}</h4>
+                    <h4 className="font-bold text-lg text-white mb-1">{outOfStock ? 'Producto Agotado' : 'Disponible en Inventario'}</h4>
                     <p className="text-gray-400 text-sm">
-                      {productData.stock > 0 
-                        ? `${productData.stock} unidades disponibles. Tiempo de entrega varía según el tipo de compra.`
-                        : 'Este producto se encuentra temporalmente agotado. Vuelve pronto.'
+                      {outOfStock
+                        ? 'Este producto se encuentra temporalmente agotado. Vuelve pronto.'
+                        : hasStockInfo
+                          ? `${stock} unidades disponibles. Tiempo de entrega varía según el tipo de compra.`
+                          : 'Disponible bajo pedido. Tiempo de entrega varía según el tipo de compra.'
                       }
                     </p>
                 </div>
             </div>
 
+            {/* Selector de cantidad */}
+            {!outOfStock && (
+                <div className="flex items-center gap-4">
+                    <span className="text-xs uppercase font-bold text-gray-500 tracking-widest">Cantidad</span>
+                    <div className="flex items-center border border-gray-700 bg-[#0A0A0A]">
+                        <button
+                            type="button"
+                            onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                            className="p-3 text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                        >
+                            <Minus size={16} />
+                        </button>
+                        <input
+                            type="number"
+                            min="1"
+                            max={maxQuantity}
+                            value={quantity}
+                            onChange={(e) => {
+                                const value = parseInt(e.target.value, 10);
+                                if (Number.isNaN(value)) return setQuantity(1);
+                                setQuantity(Math.min(Math.max(1, value), maxQuantity));
+                            }}
+                            className="w-16 bg-transparent text-center font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                            type="button"
+                            disabled={quantity >= maxQuantity}
+                            onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                            className={`p-3 transition ${quantity >= maxQuantity ? 'text-gray-800 cursor-not-allowed' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+                        >
+                            <Plus size={16} />
+                        </button>
+                    </div>
+                    <span className="text-sm text-gray-400">
+                        Total: <span className="text-white font-bold">{formatPrice(finalPrice * quantity)}</span>
+                    </span>
+                </div>
+            )}
+
             <div className="flex gap-4 mt-4">
-                <button 
+                <button
                   onClick={handleAddToCart}
-                  disabled={productData.stock <= 0}
-                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${productData.stock <= 0 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : added ? 'bg-green-500 text-white' : 'bg-white text-black hover:bg-gray-200'}`}
+                  disabled={outOfStock}
+                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${outOfStock ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : added ? 'bg-green-500 text-white' : 'bg-white text-black hover:bg-gray-200'}`}
                 >
-                    {productData.stock <= 0 ? 'Agotado' : added ? '¡Añadido!' : 'Añadir al Carrito'}
+                    {outOfStock ? 'Agotado' : added ? '¡Añadido!' : 'Añadir al Carrito'}
                 </button>
-                <button 
+                <button
                   onClick={() => {
-                      addToCart(productData);
+                      addToCart(productData, quantity);
                       navigate('/cart');
                   }}
-                  disabled={productData.stock <= 0}
-                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${productData.stock <= 0 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-[0_0_15px_rgba(255,140,0,0.4)]'}`}
+                  disabled={outOfStock}
+                  className={`flex-1 font-bold uppercase py-4 transition-colors rounded-sm ${outOfStock ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-[0_0_15px_rgba(255,140,0,0.4)]'}`}
                 >
-                    {productData.stock <= 0 ? 'Sin Stock' : 'Comprar Ahora'}
+                    {outOfStock ? 'Sin Stock' : 'Comprar Ahora'}
                 </button>
                 <button 
                   onClick={() => toggleWishlist(productData)}
@@ -238,6 +340,11 @@ export default function ProductDetails() {
          <div className="lg:col-span-1 bg-[#111] p-6 rounded-xl border border-gray-800 flex flex-col h-full max-h-[600px]">
             <h3 className="font-bold text-white mb-4 uppercase text-xl">Opiniones de Clientes</h3>
             <div className="flex-1 overflow-y-auto pr-2 space-y-4 mb-6 custom-scrollbar">
+                {reviews.length === 0 && (
+                    <p className="text-gray-500 text-sm italic">
+                        Todavía no hay opiniones de este producto. ¡Sé el primero en escribir una!
+                    </p>
+                )}
                 {reviews.map((rev) => (
                     <div key={rev.id} className="bg-black/50 p-4 rounded-sm border border-gray-800">
                         <div className="flex justify-between items-start mb-2">
@@ -287,19 +394,11 @@ export default function ProductDetails() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {recommended.length > 0 ? (
-                    recommended.map(rec => (
-                        <ProductCard 
-                            key={rec.id} 
-                            id={rec.id} 
-                            brand={rec.brand} 
-                            price={formatPrice(rec.price1)} 
-                            details={rec.name} 
-                            category={rec.category}
-                            image={rec.image_url} 
-                        />
+                    recommended.map((rec, index) => (
+                        <ProductCard key={rec.id} product={rec} delay={index} />
                     ))
                 ) : (
-                    <div className="text-gray-500 italic text-sm">Cargando sugerencias...</div>
+                    <div className="text-gray-500 italic text-sm">No hay sugerencias disponibles.</div>
                 )}
             </div>
          </div>

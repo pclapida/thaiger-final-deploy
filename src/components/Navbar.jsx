@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, User, ShoppingCart, LogIn, UserPlus, LogOut } from 'lucide-react';
+import { Search, User, ShoppingCart, LogIn, UserPlus, LogOut, Menu, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 
 const NavLink = ({ to, children }) => {
   const location = useLocation();
-  const isActive = location.pathname.startsWith(to) && to !== '/' || location.pathname === to;
+  const isActive = (location.pathname.startsWith(to) && to !== '/') || location.pathname === to;
   
   return (
     <Link to={to} className="relative px-4 py-2 flex flex-col items-center justify-center group h-14 min-w-[5rem] overflow-visible">
@@ -45,9 +45,11 @@ const NavLink = ({ to, children }) => {
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { currentUser, user, isAuthenticated, logout } = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
   const { cartItems } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const cartItemsCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -57,16 +59,28 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // El menú móvil se cierra solo al cambiar de página (ajuste durante el render,
+  // no en un efecto, para no encadenar renders extra).
+  const [menuPath, setMenuPath] = useState(location.pathname);
+  if (menuPath !== location.pathname) {
+    setMenuPath(location.pathname);
+    setIsMenuOpen(false);
+  }
+
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
+  const submitSearch = () => {
+    if (searchQuery.trim() === '') return;
+    navigate('/shop', { state: { search: searchQuery.trim() } });
+    setSearchQuery('');
+    setIsMenuOpen(false);
+  };
+
   const handleSearch = (e) => {
-    if (e.key === 'Enter' && searchQuery.trim() !== '') {
-      navigate('/shop', { state: { search: searchQuery.trim() } });
-      setSearchQuery('');
-    }
+    if (e.key === 'Enter') submitSearch();
   };
 
   return (
@@ -154,8 +168,49 @@ export default function Navbar() {
                 )}
               </motion.button>
             </Link>
+
+            {/* Botón de menú (sólo móvil) */}
+            <button
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="md:hidden p-2 text-white hover:text-orange-500 transition-colors"
+              aria-label={isMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={isMenuOpen}
+            >
+              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
           </div>
         </div>
+
+        {/* === MENÚ MÓVIL === */}
+        {isMenuOpen && (
+          <div className="md:hidden border-t border-gray-800 pt-4 pb-2 space-y-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearch}
+                placeholder="BUSCAR PRODUCTOS..."
+                className="w-full bg-white/10 border border-transparent focus:border-orange-500 rounded-sm py-2 px-4 pl-10 text-white placeholder-gray-400 focus:outline-none focus:bg-black transition-all text-sm tracking-wider"
+              />
+              <Search className="absolute left-3 top-2.5 text-gray-400 h-4 w-4" />
+            </div>
+
+            <div className="flex flex-col">
+              {user?.role === 'admin' && (
+                <Link to="/dashboard" className="py-3 text-sm font-bold uppercase text-orange-500 border-b border-gray-800">
+                  Admin
+                </Link>
+              )}
+              <Link to="/shop" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Tienda</Link>
+              <Link to="/brands" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Marcas</Link>
+              <Link to="/offers" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Ofertas</Link>
+              {isAuthenticated && (
+                <Link to="/profile" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Mi Perfil</Link>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </motion.nav>
   );

@@ -2,32 +2,15 @@ import React from 'react';
 import Navbar from '../components/Navbar';
 import { Trash2, Minus, Plus, ArrowRight, Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { formatPrice } from '../data/products';
+import { formatPrice, computeCartTotals, getUnitPrice, getTierBasePrice, hasDiscount } from '../lib/pricing';
 import { useCart } from '../context/CartContext';
 
 export default function Cart() {
-  const { cartItems, updateQuantity, removeFromCart } = useCart();
+  const { cartItems, updateQuantity, removeFromCart, clearCart } = useCart();
 
-  // 1. Calculamos el total base (usando Precio 1) para saber en qué nivel de descuento estamos
-  const baseTotal = cartItems.reduce((acc, item) => acc + (item.price1 * item.quantity), 0);
-
-  // 2. Determinamos el nivel de tier
-  let currentTier = 1;
-  if (baseTotal >= 20000) currentTier = 3;
-  else if (baseTotal >= 10000) currentTier = 2;
-
-  // 3. Función para obtener el precio activo de un producto según el tier
-  const getActivePrice = (item) => {
-      if (currentTier === 3) return item.price3;
-      if (currentTier === 2) return item.price2;
-      return item.price1;
-  };
-
-  // 4. Calculamos el subtotal REAL con los descuentos aplicados
-  const subtotal = cartItems.reduce((acc, item) => acc + (getActivePrice(item) * item.quantity), 0);
-
-  const shipping = subtotal > 5000 ? 0 : 250; // Envío gratis si supera los $5,000 en el pago final
-  const total = subtotal + shipping;
+  // Toda la aritmética de niveles, ofertas y envío vive en src/lib/pricing.js
+  const { tier: currentTier, subtotal, shipping, total, missingForNextTier } = computeCartTotals(cartItems);
+  const getActivePrice = (item) => getUnitPrice(item, currentTier);
 
   return (
     <div className="bg-[#0A0A0A] min-h-screen text-white font-sans">
@@ -39,8 +22,11 @@ export default function Cart() {
         </h1>
 
         {cartItems.length === 0 ? (
-           <div className="text-center py-20 text-gray-400 uppercase tracking-widest">
-              Tu carrito está vacío.
+           <div className="text-center py-20">
+              <p className="text-gray-400 uppercase tracking-widest mb-6">Tu carrito está vacío.</p>
+              <Link to="/shop" className="text-orange-500 font-bold uppercase text-sm hover:text-white transition-colors">
+                 Ir a la tienda
+              </Link>
            </div>
         ) : (
           <div className="flex flex-col lg:flex-row gap-8">
@@ -50,10 +36,10 @@ export default function Cart() {
               {/* Banner de aviso de descuentos (Solo muestra si aún puede mejorar de nivel) */}
               {currentTier < 3 && (
                 <div className="bg-orange-600/20 border border-orange-500 rounded p-4 flex items-center gap-4 text-sm font-semibold mb-6">
-                    <Tag className="text-orange-500" />
+                    <Tag className="text-orange-500 shrink-0" />
                     <p>
-                        Estás en el <span className="text-orange-500">Nivel de Precio {currentTier}</span>. 
-                        ¡Agrega <span className="text-white">${formatPrice((currentTier === 1 ? 10000 : 20000) - baseTotal)}</span> más en productos para desbloquear el Nivel {currentTier + 1} y conseguir mejores precios!
+                        Estás en el <span className="text-orange-500">Nivel de Precio {currentTier}</span>.
+                        ¡Agrega <span className="text-white">{formatPrice(missingForNextTier)}</span> más en productos para desbloquear el Nivel {currentTier + 1} y conseguir mejores precios!
                     </p>
                 </div>
               )}
@@ -77,7 +63,19 @@ export default function Cart() {
                       <p className="text-orange-500 text-xs font-bold uppercase tracking-widest mb-1">{item.brand}</p>
                       <h3 className="text-lg font-bold uppercase">{item.name}</h3>
                       <div className="flex flex-col gap-1 mt-1">
-                        <p className="text-gray-400 text-sm">Precio: {formatPrice(getActivePrice(item))}</p>
+                        <p className="text-gray-400 text-sm flex items-center gap-2">
+                          Precio: {formatPrice(getActivePrice(item))}
+                          {hasDiscount(item) && (
+                            <>
+                              <span className="line-through text-gray-600 text-xs">
+                                {formatPrice(getTierBasePrice(item, currentTier))}
+                              </span>
+                              <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase">
+                                -{item.discount_percent}%
+                              </span>
+                            </>
+                          )}
+                        </p>
                         {item.stock !== undefined && (
                           <p className={`text-[10px] uppercase font-bold ${item.stock < 5 ? 'text-red-500' : 'text-gray-500'}`}>
                             Disponibles: {item.stock} unidades
@@ -163,7 +161,14 @@ export default function Cart() {
                     </button>
                 </Link>
                 {/* --------------------------------------------- */}
-                
+
+                <button
+                  onClick={clearCart}
+                  className="w-full mt-3 py-3 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-red-500 transition-colors"
+                >
+                  Vaciar carrito
+                </button>
+
                 <div className="mt-6 text-xs text-gray-500 text-center uppercase tracking-wider flex flex-col gap-2">
                    <p>Pagos Seguros Encriptados</p>
                    <div className="flex justify-center gap-2 opacity-50">

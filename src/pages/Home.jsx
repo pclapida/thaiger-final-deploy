@@ -3,35 +3,42 @@ import Navbar from '../components/Navbar';
 import ProductCard from '../components/ProductCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { supabase } from '../supabase';
+import { products as productsApi } from '../services/api';
+import { hasDiscount } from '../lib/pricing';
 
+// Las marcas del carrusel y del listado deben existir en el catálogo,
+// de lo contrario "Ver Productos" lleva a una tienda vacía.
 const HERO_BRANDS = [
   { name: 'MUTANT', img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=2000&auto=format&fit=crop', subtitle: 'DEJA LA HUMANIDAD ATRÁS' },
   { name: 'INSANE LABZ', img: 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?q=80&w=2000&auto=format&fit=crop', subtitle: 'MAYOR ENERGÍA Y ENFOQUE' },
-  { name: 'GAT SPORT', img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2000&auto=format&fit=crop', subtitle: 'SUPLEMENTACIÓN DE ÉLITE' }
+  { name: 'EVOGEN', img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=2000&auto=format&fit=crop', subtitle: 'SUPLEMENTACIÓN DE ÉLITE' }
 ];
+
+const POPULAR_BRANDS = ['MUTANT', 'INSANE LABZ', 'EVOGEN', 'CELLUCOR', 'NUTREX', 'HI-TECH'];
 
 export default function Home() {
   const [productosDestacados, setProductosDestacados] = useState([]);
   const [productosPromociones, setProductosPromociones] = useState([]);
 
   useEffect(() => {
-    const fetchHomeProducts = async () => {
-        // Destacados: últimos 4 productos
-        const { data: featuredData } = await supabase.from('products').select('*').limit(4).order('id', { ascending: false });
-        if (featuredData) setProductosDestacados(featuredData);
-        
-        // Promociones: productos en oferta real
-        const { data: saleData } = await supabase.from('products').select('*').eq('is_on_sale', true).limit(4);
-        if (saleData && saleData.length > 0) {
-            setProductosPromociones(saleData);
-        } else if (featuredData) {
-            // Fallback si no hay ofertas activas: los primeros 4
-            const { data: fallback } = await supabase.from('products').select('*').limit(4).order('price1', { ascending: false });
-            setProductosPromociones(fallback || []);
-        }
+    let active = true;
+
+    productsApi
+      .list()
+      .then((list) => {
+        if (!active) return;
+        // Destacados: los últimos productos dados de alta (la lista llega por id descendente).
+        setProductosDestacados(list.slice(0, 4));
+        // Promociones: sólo lo que el admin marcó realmente como oferta.
+        setProductosPromociones(list.filter(hasDiscount).slice(0, 4));
+      })
+      .catch((error) => {
+        console.error('No se pudieron cargar los productos del inicio:', error);
+      });
+
+    return () => {
+      active = false;
     };
-    fetchHomeProducts();
   }, []);
 
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -105,16 +112,7 @@ export default function Home() {
         <h3 className="text-center text-gray-300 uppercase tracking-[0.2em] text-sm font-bold mb-10">Destacados</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {productosDestacados.length > 0 ? productosDestacados.map((prod, index) => (
-             <ProductCard 
-                key={prod.id} 
-                id={prod.id} 
-                brand={prod.brand} 
-                details={prod.name} 
-                price={`$${prod.price1}`} 
-                category={prod.category}
-                image={prod.image_url} 
-                stock={prod.stock}
-             />
+             <ProductCard key={prod.id} product={prod} delay={index} />
           )) : <div className="col-span-4 text-center text-gray-500">Cargando destacados...</div>}
         </div>
       </div>
@@ -123,23 +121,13 @@ export default function Home() {
       <div className="container mx-auto px-4 pb-16">
         <h3 className="text-center text-gray-300 uppercase tracking-[0.2em] text-sm font-bold mb-10">Promociones</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {productosPromociones.length > 0 ? productosPromociones.map((prod, index) => {
-            return (
-              <ProductCard 
-                 key={prod.id}
-                 id={prod.id} 
-                 brand={prod.brand} 
-                 details={prod.name} 
-                 price={prod.price1}
-                 category={prod.category}
-                 image={prod.image_url} 
-                 stock={prod.stock}
-                 delay={index}
-                 isOnSale={prod.is_on_sale}
-                 discountPercent={prod.discount_percent}
-              />
-            );
-          }) : <div className="col-span-4 text-center text-gray-500">Cargando promociones...</div>}
+          {productosPromociones.length > 0 ? productosPromociones.map((prod, index) => (
+            <ProductCard key={prod.id} product={prod} delay={index} />
+          )) : (
+            <div className="col-span-4 text-center text-gray-500">
+              No hay promociones activas por ahora.
+            </div>
+          )}
         </div>
       </div>
 
@@ -147,11 +135,11 @@ export default function Home() {
       <div className="container mx-auto px-4 pb-20">
         <h3 className="text-center text-gray-300 uppercase tracking-[0.2em] text-sm font-bold mb-6">Marcas mas populares</h3>
         <div className="border border-gray-800 bg-[#0a0a0a] p-8 rounded-xl flex flex-wrap justify-center items-center gap-12 opacity-60 hover:opacity-100 transition-opacity duration-500">
-          {['MUTANT', 'INSANE LABZ', 'GAT SPORT', 'NUTREX', 'RONNIE COLEMAN'].map((marca, i) => (
+          {POPULAR_BRANDS.map((marca) => (
             <Link
               to="/shop"
               state={{ brand: marca }}
-              key={i}
+              key={marca}
               className="text-xl font-bold italic text-gray-500 hover:text-white cursor-pointer transition-colors"
             >
               {marca}

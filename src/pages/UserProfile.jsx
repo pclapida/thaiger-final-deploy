@@ -4,59 +4,87 @@ import { Box, User, MapPin, ChevronRight, PackageCheck, Clock, Camera, Save, Hea
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
-import { supabase } from '../supabase';
+import { orders as ordersApi, auth as authApi } from '../services/api';
+import { formatPrice } from '../lib/pricing';
 import ProductCard from '../components/ProductCard';
-
-// Los pedidos falsos (DUMMY_ORDERS) han sido removidos. Se implementará conexión con base de datos.
+import toast from 'react-hot-toast';
 
 export default function UserProfile() {
-    const { currentUser, user, updateProfile } = useAuth();
+    const { user, updateProfile } = useAuth();
     const { wishlistItems } = useWishlist();
     const [activeTab, setActiveTab] = useState('pedidos');
-    
+
     // Estado para "Detalles de Cuenta"
     const [displayName, setDisplayName] = useState(user?.name || '');
     const [photoURL, setPhotoURL] = useState(user?.avatar_url || '');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
     const [updateMsg, setUpdateMsg] = useState('');
 
     // Estado para "Pedidos"
     const [orders, setOrders] = useState([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
 
+    const userId = user?.id;
+
     useEffect(() => {
-        if (activeTab === 'pedidos' && user?.uid) {
-            const fetchOrders = async () => {
-                setLoadingOrders(true);
-                const { data, error } = await supabase
-                    .from('orders')
-                    .select('*, order_items(*)')
-                    .eq('user_id', user.uid)
-                    .order('created_at', { ascending: false });
-                
-                if (data && !error) setOrders(data);
-                setLoadingOrders(false);
-            };
-            fetchOrders();
+        if (activeTab !== 'pedidos' || !userId) return;
+
+        let active = true;
+        setLoadingOrders(true);
+
+        ordersApi
+            .listByUser(userId)
+            .then((list) => {
+                if (active) setOrders(list);
+            })
+            .catch((error) => {
+                console.error('No se pudieron cargar los pedidos:', error);
+                if (active) setOrders([]);
+            })
+            .finally(() => {
+                if (active) setLoadingOrders(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [activeTab, userId]);
+
+    const handlePhotoFile = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        setIsUploadingPhoto(true);
+        try {
+            const url = await authApi.uploadAvatar(file);
+            setPhotoURL(url);
+            toast.success('Foto lista. Guarda los cambios para aplicarla.');
+        } catch (error) {
+            toast.error(error.message || 'No se pudo procesar la imagen.');
+        } finally {
+            setIsUploadingPhoto(false);
         }
-    }, [activeTab, user]);
+    };
 
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setIsUpdating(true);
         setUpdateMsg('');
-        
+
         const result = await updateProfile({
             name: displayName,
-            avatar_url: photoURL
+            avatar_url: photoURL || null
         });
 
         if (result.success) {
             setUpdateMsg('¡Perfil actualizado con éxito!');
+            toast.success('Perfil actualizado');
         } else {
-            setUpdateMsg('Error al actualizar: ' + result.error.message);
+            setUpdateMsg('Error al actualizar: ' + (result.error?.message || 'intenta de nuevo.'));
         }
-        
+
         setIsUpdating(false);
     };
 
@@ -92,8 +120,8 @@ export default function UserProfile() {
                         </div>
                     </div>
                     <div>
-                        <h1 className="text-3xl font-extrabold uppercase tracking-wider">{user?.name || currentUser?.user_metadata?.name || 'Usuario Thaiger'}</h1>
-                        <p className="text-gray-400">{currentUser?.email}</p>
+                        <h1 className="text-3xl font-extrabold uppercase tracking-wider">{user?.name || 'Usuario Thaiger'}</h1>
+                        <p className="text-gray-400">{user?.email}</p>
                     </div>
                 </div>
 
@@ -153,7 +181,7 @@ export default function UserProfile() {
                                             <div key={order.id} className="bg-[#111] border border-gray-800 hover:border-orange-500/50 transition-colors p-6 rounded-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-4">
-                                                        <h3 className="text-xl font-extrabold text-white tracking-wider" title={order.id}>TH-{order.id.split('-')[0].toUpperCase()}</h3>
+                                                        <h3 className="text-xl font-extrabold text-white tracking-wider" title={order.id}>TH-{String(order.id).split('-')[0].toUpperCase()}</h3>
                                                         <StatusBadge status={order.status} />
                                                     </div>
                                                     <p className="text-sm text-gray-400">Realizado el: {new Date(order.created_at).toLocaleDateString()}</p>
@@ -161,7 +189,7 @@ export default function UserProfile() {
                                                 </div>
 
                                                 <div className="flex flex-row md:flex-col items-center md:items-end gap-4 md:gap-2 w-full md:w-auto justify-between">
-                                                    <span className="text-2xl font-extrabold text-orange-500 tracking-tight">${order.total}</span>
+                                                    <span className="text-2xl font-extrabold text-orange-500 tracking-tight">{formatPrice(order.total)}</span>
                                                     <p className="text-xs uppercase text-gray-500 flex items-center gap-1 font-bold">
                                                         SPEI: {order.payment_info?.concepto || 'N/A'}
                                                     </p>
@@ -185,7 +213,7 @@ export default function UserProfile() {
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                         {wishlistItems.map((prod, idx) => (
-                                            <ProductCard key={prod.id} delay={idx} id={prod.id} brand={prod.brand} details={prod.name} price={`$${prod.price1}`} image={prod.image} category={prod.category} />
+                                            <ProductCard key={prod.id} product={prod} delay={idx} />
                                         ))}
                                     </div>
                                 )}
@@ -204,33 +232,65 @@ export default function UserProfile() {
                                 <form onSubmit={handleUpdateProfile} className="bg-[#111] border border-gray-800 p-8 rounded-sm max-w-2xl">
                                     <div className="space-y-6">
                                         <div className="space-y-2">
-                                            <label className="text-xs uppercase font-bold text-gray-500">Nombre Público</label>
-                                            <input 
-                                                type="text" 
+                                            <label htmlFor="profile-name" className="text-xs uppercase font-bold text-gray-500">Nombre Público</label>
+                                            <input
+                                                id="profile-name"
+                                                type="text"
                                                 value={displayName}
                                                 onChange={(e) => setDisplayName(e.target.value)}
                                                 className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" 
                                                 placeholder="Tu nombre completo o apodo" 
                                             />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs uppercase font-bold text-gray-500">URL de tu Foto de Perfil</label>
-                                            <input 
-                                                type="url" 
-                                                value={photoURL}
+                                        <div className="space-y-3">
+                                            <label htmlFor="profile-photo" className="text-xs uppercase font-bold text-gray-500">Foto de Perfil</label>
+
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-16 h-16 rounded-full overflow-hidden bg-[#0A0A0A] border border-gray-700 flex items-center justify-center shrink-0">
+                                                    {photoURL ? (
+                                                        <img src={photoURL} alt="Vista previa" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <User size={24} className="text-gray-600" />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 space-y-2">
+                                                    <input
+                                                        id="profile-photo"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handlePhotoFile}
+                                                        disabled={isUploadingPhoto}
+                                                        className="w-full bg-[#0A0A0A] border border-gray-700 p-2 rounded-sm text-gray-400 text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-orange-600 file:text-white hover:file:bg-orange-700"
+                                                    />
+                                                    {isUploadingPhoto && <p className="text-xs text-orange-500">Procesando imagen...</p>}
+                                                </div>
+                                            </div>
+
+                                            <input
+                                                type="url"
+                                                aria-label="URL de la foto de perfil"
+                                                value={photoURL?.startsWith('data:') ? '' : photoURL}
                                                 onChange={(e) => setPhotoURL(e.target.value)}
-                                                className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" 
-                                                placeholder="https://ejemplo.com/mifoto.jpg" 
+                                                className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm"
+                                                placeholder="...o pega la URL de una imagen"
                                             />
-                                            <p className="text-[10px] text-gray-500">Ingresa un link directo a una imagen para usarla como tu avatar.</p>
+                                            {photoURL && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPhotoURL('')}
+                                                    className="text-xs text-gray-500 hover:text-red-500 uppercase font-bold"
+                                                >
+                                                    Quitar foto
+                                                </button>
+                                            )}
                                         </div>
                                         <div className="space-y-2 opacity-50 cursor-not-allowed">
                                             <label className="text-xs uppercase font-bold text-gray-500">Correo Electrónico (No editable)</label>
-                                            <input 
-                                                type="email" 
+                                            <input
+                                                type="email"
                                                 disabled
-                                                value={currentUser?.email || ''}
-                                                className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-gray-500 rounded-sm" 
+                                                value={user?.email || ''}
+                                                className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-gray-500 rounded-sm"
                                             />
                                         </div>
 

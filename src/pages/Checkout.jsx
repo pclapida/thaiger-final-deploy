@@ -4,8 +4,8 @@ import { MapPin, ShieldCheck, Landmark, CheckCircle, Copy, AlertCircle } from 'l
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../supabase';
-import { formatPrice } from '../data/products';
+import { orders as ordersApi } from '../services/api';
+import { formatPrice, computeCartTotals, getUnitPrice } from '../lib/pricing';
 import toast from 'react-hot-toast';
 
 export default function Checkout() {
@@ -17,18 +17,22 @@ export default function Checkout() {
         fullName: '', phone: '', address: '', city: '', zip: ''
     });
     
-    // SPEI DUMMY DATA
+    // Datos de la cuenta para la transferencia SPEI.
+    // El concepto se genera una sola vez por visita al checkout.
     const speiData = React.useMemo(() => ({
         banco: "BBVA Bancomer",
         clabe: "012345678901234567",
         beneficiario: "Thaiger Supplements MX",
-        // eslint-disable-next-line react-hooks/purity
-        concepto: `TH-${Math.floor(1000 + Math.random() * 9000)}` // Random order id
+        concepto: `TH-${Math.floor(1000 + Math.random() * 9000)}`
     }), []);
+
+    // Mismos cálculos que el carrito (src/lib/pricing.js)
+    const { tier: currentTier, subtotal, shipping, total } = computeCartTotals(cartItems);
+    const getActivePrice = (item) => getUnitPrice(item, currentTier);
 
     const handlePayment = async (e) => {
         e.preventDefault();
-        if (!user || !user.uid) {
+        if (!user?.id) {
             toast.error("Debes iniciar sesión para finalizar tu compra.");
             return;
         }
@@ -39,83 +43,39 @@ export default function Checkout() {
 
         setIsProcessing(true);
         try {
-            // 1. Create the Order
-            const { data: createdOrders, error: orderError } = await supabase.from('orders').insert({
-                user_id: user.uid,
-                total: total,
-                shipping_info: formData,
-                payment_info: { method: 'SPEI', concepto: speiData.concepto, banco: speiData.banco },
-                status: 'Pago Pendiente'
-            }).select();
-
-            if (orderError) {
-                console.error("Error al crear orden en Supabase:", orderError);
-                throw new Error(`Error en tabla de pedidos: ${orderError.message}`);
-            }
-
-            if (!createdOrders || createdOrders.length === 0) {
-                throw new Error("No se pudo obtener la confirmación del pedido (posible problema de permisos).");
-            }
-
-            const orderData = createdOrders[0];
-
-            // 2. Prepare and create the Order Items
-            const orderItems = cartItems.map(item => ({
-                order_id: orderData.id,
+            const items = cartItems.map(item => ({
                 product_id: item.id,
                 product_name: item.name,
                 quantity: item.quantity,
                 price_at_purchase: getActivePrice(item)
             }));
 
-            const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-            if (itemsError) {
-                console.error("Error al insertar artículos del pedido:", itemsError);
-                throw new Error(`Error al guardar productos: ${itemsError.message}`);
+            await ordersApi.create({
+                userId: user.id,
+                total,
+                shippingInfo: formData,
+                paymentInfo: { method: 'SPEI', concepto: speiData.concepto, banco: speiData.banco },
+                items
+            });
+
+            // El inventario se descuenta después de confirmar el pedido.
+            try {
+                await ordersApi.decrementStock(items);
+            } catch (stockError) {
+                console.warn("El pedido se guardó pero no se pudo descontar el inventario:", stockError);
             }
 
-            // 3. Update stock for each product
-            for (const item of cartItems) {
-                try {
-                   const { error: rpcError } = await supabase.rpc('decrement_stock', { product_id: item.id, qty: item.quantity });
-                   if (rpcError) {
-                       // Fallback: update manual si la función RPC falla o no existe
-                       await supabase.from('products')
-                         .update({ stock: Math.max(0, (item.stock || 0) - item.quantity) })
-                         .eq('id', item.id);
-                   }
-                } catch (stockErr) {
-                    console.warn(`No se pudo actualizar stock de ${item.id}:`, stockErr);
-                }
-            }
-
-            toast.success(`¡Pedido Registrado!\nTransfiere con concepto ${speiData.concepto}`, { duration: 8000 });
+            toast.success(`¡Pedido registrado! Transfiere con el concepto ${speiData.concepto}`, { duration: 8000 });
             clearCart();
             navigate('/profile');
-            
+
         } catch (error) {
             console.error("Detalle del error de compra:", error);
-            toast.error(error.message || "Hubo un error de base de datos. Intente de nuevo.", { duration: 6000 });
+            toast.error(error.message || "Hubo un error al registrar el pedido. Intenta de nuevo.", { duration: 6000 });
         } finally {
             setIsProcessing(false);
         }
     };
-
-    // Cálculos de Cart igual que en Cart.jsx
-    const baseTotal = cartItems.reduce((acc, item) => acc + (item.price1 * item.quantity), 0);
-    let currentTier = 1;
-    if (baseTotal >= 20000) currentTier = 3;
-    else if (baseTotal >= 10000) currentTier = 2;
-
-    const getActivePrice = (item) => {
-        if (currentTier === 3) return item.price3;
-        if (currentTier === 2) return item.price2;
-        return item.price1;
-    };
-
-    const subtotal = cartItems.reduce((acc, item) => acc + (getActivePrice(item) * item.quantity), 0);
-    const shipping = subtotal > 5000 ? 0 : 250; 
-    const total = subtotal + shipping;
 
     // Si entran al checkout sin nada en cart
     if (cartItems.length === 0 && !isProcessing) {
@@ -200,6 +160,21 @@ export default function Checkout() {
                                         <span className="text-gray-500 uppercase font-bold text-xs">CLABE Interbancaria</span>
                                         <div className="flex items-center gap-3">
                                             <span className="text-orange-500 font-extrabold text-xl tracking-widest">{speiData.clabe}</span>
+                                            <button
+                                                type="button"
+                                                title="Copiar CLABE"
+                                                onClick={async () => {
+                                                    try {
+                                                        await navigator.clipboard.writeText(speiData.clabe);
+                                                        toast.success('CLABE copiada');
+                                                    } catch {
+                                                        toast.error('Tu navegador bloqueó el portapapeles');
+                                                    }
+                                                }}
+                                                className="text-gray-500 hover:text-orange-500 transition-colors"
+                                            >
+                                                <Copy size={16} />
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center pt-2">
