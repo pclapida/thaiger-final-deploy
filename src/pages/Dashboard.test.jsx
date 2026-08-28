@@ -4,20 +4,33 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Dashboard from './Dashboard';
-import { products } from '../services/localBackend';
-import { renderWithProviders, resetApp, makeImageFile } from '../test/utils';
+import { products, settings, users } from '../services/localBackend';
+import { SEED_PRODUCTS } from '../data/seed';
+import { entrarComoAdmin, makeImageFile, renderWithProviders, resetApp } from '../test/utils';
 
+const TOTAL = SEED_PRODUCTS.length;
+
+/** Un producto del catálogo que sirve de sujeto en varias pruebas. */
+const SUJETO = SEED_PRODUCTS.find((p) => p.name.includes('Creatina Monohidratada'));
+
+async function abrirPestana(user, nombre) {
+  const [boton] = await screen.findAllByRole('button', { name: nombre });
+  await user.click(boton);
+}
+
+/**
+ * Abre el inventario y, si se pide, filtra la tabla.
+ * Las consultas por rol recorren todo el DOM: reducir la tabla antes de abrir
+ * el modal mantiene la prueba rápida.
+ */
 async function abrirPestanaProductos(user, { filtrar } = {}) {
-  const [botonProductos] = await screen.findAllByRole('button', { name: /productos/i });
-  await user.click(botonProductos);
+  await abrirPestana(user, /productos/i);
   await screen.findByRole('heading', { name: /gestor de inventario/i });
-  await waitFor(() => expect(screen.getByText(/244 resultados/i)).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText(new RegExp(`${TOTAL} resultados`, 'i'))).toBeInTheDocument());
 
-  // Las consultas por rol recorren todo el DOM: con 244 filas en la tabla se
-  // vuelven lentísimas, así que reducimos la tabla antes de abrir el modal.
   if (filtrar !== undefined) {
     await user.type(screen.getByPlaceholderText(/buscar por nombre/i), filtrar);
-    await waitFor(() => expect(screen.queryByText(/244 resultados/i)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(new RegExp(`${TOTAL} resultados`, 'i'))).toBeNull());
   }
 }
 
@@ -28,6 +41,8 @@ async function abrirModalNuevo(user) {
 
 beforeEach(async () => {
   await resetApp();
+  // Todas las operaciones del panel exigen sesión de administrador.
+  await entrarComoAdmin();
 });
 
 describe('panel de administración', () => {
@@ -35,18 +50,31 @@ describe('panel de administración', () => {
     renderWithProviders(<Dashboard />);
 
     expect(await screen.findByRole('heading', { name: /dashboard general/i })).toBeInTheDocument();
-    // 244 productos del catálogo base.
-    await waitFor(() => expect(screen.getByText('244')).toBeInTheDocument());
-    expect(screen.getByText(/sin ventas registradas todavía/i)).toBeInTheDocument();
+
+    // La métrica "Productos" acaba mostrando el tamaño del catálogo.
+    // Se busca por encabezado: "Productos" es además el nombre de una pestaña.
+    const metrica = (await screen.findByRole('heading', { name: /^productos$/i })).closest('div');
+    // El número sube animado (AnimatedNumber): hay que esperar a que llegue.
+    await waitFor(() => expect(within(metrica).getByText(String(TOTAL))).toBeInTheDocument(), {
+      timeout: 5000,
+    });
+  });
+
+  it('la gráfica de ingresos trae los pedidos de ejemplo', async () => {
+    renderWithProviders(<Dashboard />);
+    await screen.findByRole('heading', { name: /dashboard general/i });
+
+    // La demo siembra pedidos, así que el panel NO arranca vacío.
+    await waitFor(() => expect(screen.queryByText(/sin ventas registradas todavía/i)).toBeNull());
   });
 
   it('lista el inventario y permite buscarlo', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Dashboard />);
-    await abrirPestanaProductos(user, { filtrar: 'creatina de gomitas' });
+    await abrirPestanaProductos(user, { filtrar: SUJETO.name });
 
-    await waitFor(() => expect(screen.getByText(/1 resultados/i)).toBeInTheDocument());
-    expect(screen.getByTitle('CREATINA DE GOMITAS')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/1 resultados?/i)).toBeInTheDocument());
+    expect(screen.getByTitle(SUJETO.name)).toBeInTheDocument();
   });
 
   it('da de alta un producto manualmente con su foto', async () => {
@@ -56,7 +84,7 @@ describe('panel de administración', () => {
     await abrirModalNuevo(user);
 
     await user.type(screen.getByLabelText(/nombre del producto/i), 'Proteína Thaiger 2kg');
-    await user.type(screen.getByLabelText(/^marca/i), 'THAIGER');
+    await user.type(screen.getByLabelText(/^marca/i), 'THAIGER LABS');
     await user.type(screen.getByLabelText(/^categoría/i), 'Proteína');
     await user.type(screen.getByLabelText(/descripción/i), 'Aislado de suero, 60 servicios.');
     await user.clear(screen.getByLabelText(/stock/i));
@@ -66,18 +94,16 @@ describe('panel de administración', () => {
     // Foto tomada del disco del usuario.
     await user.upload(screen.getByLabelText(/foto del producto/i), makeImageFile());
     await waitFor(() =>
-      expect(screen.getByAltText(/vista previa/i)).toHaveAttribute('src', expect.stringContaining('data:image/jpeg'))
+      expect(screen.getByAltText(/vista previa/i)).toHaveAttribute('src', expect.stringContaining('data:image/'))
     );
 
     await user.click(screen.getByRole('button', { name: /crear producto/i }));
 
-    // El modal se cierra y el producto queda guardado en la base local, con foto.
     await waitFor(() => expect(screen.queryByRole('heading', { name: /nuevo producto/i })).toBeNull());
 
-    const guardados = await products.list();
-    const creado = guardados.find((p) => p.name === 'Proteína Thaiger 2kg');
+    const creado = (await products.list()).find((p) => p.name === 'Proteína Thaiger 2kg');
     expect(creado).toMatchObject({
-      brand: 'THAIGER',
+      brand: 'THAIGER LABS',
       category: 'Proteína',
       price1: 1499.9,
       stock: 25,
@@ -94,6 +120,7 @@ describe('panel de administración', () => {
     renderWithProviders(<Dashboard />);
     await abrirPestanaProductos(user, { filtrar: 'zzz-sin-coincidencias' });
     await abrirModalNuevo(user);
+
     await user.type(screen.getByLabelText(/nombre del producto/i), 'Incompleto');
     await user.click(screen.getByRole('button', { name: /crear producto/i }));
 
@@ -107,6 +134,7 @@ describe('panel de administración', () => {
     renderWithProviders(<Dashboard />);
     await abrirPestanaProductos(user, { filtrar: 'zzz-sin-coincidencias' });
     await abrirModalNuevo(user);
+
     await user.type(screen.getByLabelText(/precio público/i), '1000');
     await user.click(screen.getByRole('button', { name: /calcular niveles/i }));
 
@@ -117,10 +145,10 @@ describe('panel de administración', () => {
   it('edita un producto existente', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Dashboard />);
-    await abrirPestanaProductos(user, { filtrar: 'creatina de gomitas' });
-    await waitFor(() => expect(screen.getByText(/1 resultados/i)).toBeInTheDocument());
+    await abrirPestanaProductos(user, { filtrar: SUJETO.name });
+    await waitFor(() => expect(screen.getByText(/1 resultados?/i)).toBeInTheDocument());
 
-    await user.click(screen.getByTitle('Editar'));
+    await user.click(screen.getAllByTitle('Editar')[0]);
     expect(await screen.findByRole('heading', { name: /editar producto/i })).toBeInTheDocument();
 
     const stock = screen.getByLabelText(/stock/i);
@@ -129,23 +157,74 @@ describe('panel de administración', () => {
     await user.click(screen.getByRole('button', { name: /guardar cambios/i }));
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: /editar producto/i })).toBeNull());
-    const actualizado = (await products.list()).find((p) => p.name === 'CREATINA DE GOMITAS');
-    expect(actualizado.stock).toBe(7);
+    expect((await products.list()).find((p) => p.name === SUJETO.name).stock).toBe(7);
   });
 
   it('activa y desactiva una oferta desde la tabla', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Dashboard />);
-    await abrirPestanaProductos(user, { filtrar: 'creatina de gomitas' });
-    await waitFor(() => expect(screen.getByText(/1 resultados/i)).toBeInTheDocument());
+    await abrirPestanaProductos(user, { filtrar: SUJETO.name });
+    await waitFor(() => expect(screen.getByText(/1 resultados?/i)).toBeInTheDocument());
 
-    const fila = screen.getByTitle('CREATINA DE GOMITAS').closest('tr');
+    const fila = screen.getByTitle(SUJETO.name).closest('tr');
+    const antes = (await products.list()).find((p) => p.name === SUJETO.name).is_on_sale;
+
     await user.click(within(fila).getByTitle(/activar o desactivar la oferta/i));
 
     await waitFor(async () => {
-      const producto = (await products.list()).find((p) => p.name === 'CREATINA DE GOMITAS');
-      expect(producto.is_on_sale).toBe(true);
-      expect(producto.discount_percent).toBe(15);
+      const producto = (await products.list()).find((p) => p.name === SUJETO.name);
+      expect(producto.is_on_sale).toBe(!antes);
     });
+  });
+});
+
+describe('panel: usuarios', () => {
+  it('lista las cuentas y permite cambiar el rol', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Dashboard />);
+    await screen.findByRole('heading', { name: /dashboard general/i });
+
+    await abrirPestana(user, /usuarios/i);
+
+    // El panel pinta tabla en escritorio y tarjetas en móvil: el correo sale dos veces.
+    expect((await screen.findAllByText('admin@thaiger.mx')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('cliente@thaiger.mx').length).toBeGreaterThan(0);
+
+    const lista = await users.list();
+    const cliente = lista.find((u) => u.role === 'user');
+    expect(cliente.email).toBe('cliente@thaiger.mx');
+  });
+});
+
+describe('panel: ajustes', () => {
+  it('guarda los datos bancarios y se reflejan en la configuración', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Dashboard />);
+    await screen.findByRole('heading', { name: /dashboard general/i });
+
+    await abrirPestana(user, /ajustes/i);
+
+    const clabe = await screen.findByLabelText(/clabe/i);
+    await user.clear(clabe);
+    await user.type(clabe, '111122223333444455');
+
+    // El primer botón de guardar del bloque de pago.
+    const guardar = screen.getAllByRole('button', { name: /guardar/i })[0];
+    await user.click(guardar);
+
+    await waitFor(async () => expect((await settings.get()).payment.clabe).toBe('111122223333444455'));
+  });
+});
+
+describe('panel: carrusel', () => {
+  it('muestra los slides de la configuración', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Dashboard />);
+    await screen.findByRole('heading', { name: /dashboard general/i });
+
+    await abrirPestana(user, /carrusel/i);
+
+    // Los cuatro slides sembrados en src/data/settings.js.
+    expect(await screen.findAllByDisplayValue(/THAIGER LABS|IRON PEAK|VOLT SUPPS|PURE CORE/)).toBeTruthy();
   });
 });

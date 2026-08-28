@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 900" width="1920" height="900" role="img" aria-label="VOLT SUPPS">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#000000"/>
+      <stop offset="52%" stop-color="#332702"/>
+      <stop offset="100%" stop-color="#816204"/>
+    </linearGradient>
+    <radialGradient id="brillo" cx="0.72" cy="0.34" r="0.55">
+      <stop offset="0%" stop-color="#eab308" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#eab308" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="900" fill="url(#fondo)"/>
+  <g>
+    <path d="M134 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.083"/>
+    <path d="M324 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.050"/>
+    <path d="M514 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.167"/>
+    <path d="M704 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.133"/>
+    <path d="M894 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.100"/>
+    <path d="M1084 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.067"/>
+    <path d="M1274 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.183"/>
+    <path d="M1464 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.150"/>
+    <path d="M1654 -100 l180 0 l-320 1100 l-180 0 z" fill="#eab308" opacity="0.117"/>
+  </g>
+  <rect width="1920" height="900" fill="url(#brillo)"/>
+  <g>
+    <circle cx="404" cy="388" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="553" cy="621" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="702" cy="854" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="851" cy="207" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1000" cy="440" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1149" cy="673" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1298" cy="26" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1447" cy="259" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1596" cy="492" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1745" cy="725" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1894" cy="78" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="143" cy="311" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="292" cy="544" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="441" cy="777" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="590" cy="130" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="739" cy="363" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="888" cy="596" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1037" cy="829" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1186" cy="182" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1335" cy="415" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1484" cy="648" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1633" cy="881" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1782" cy="234" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="31" cy="467" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="180" cy="700" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="329" cy="53" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="478" cy="286" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="627" cy="519" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="776" cy="752" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="925" cy="105" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1074" cy="338" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1223" cy="571" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1372" cy="804" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1521" cy="157" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1670" cy="390" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1819" cy="623" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="68" cy="856" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="217" cy="209" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="366" cy="442" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="515" cy="675" r="3" fill="#ffffff" opacity="0.10"/>
+  </g>
+  <path d="M1240 0 l260 0 l-420 900 l-260 0 z" fill="#eab308" opacity="0.22"/>
+  <path d="M1500 0 l90 0 l-420 900 l-90 0 z" fill="#eab308" opacity="0.40"/>
+  <text x="1500" y="470" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="150" font-weight="900" font-style="italic" fill="#ffffff" opacity="0.07" letter-spacing="6">VOLT SUPPS</text>
+</svg>

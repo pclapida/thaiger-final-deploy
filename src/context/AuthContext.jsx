@@ -1,8 +1,20 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { auth } from '../services/api';
 
 const AuthContext = createContext(null);
+
+/** Pantalla mientras se recupera la sesión: la marca, no un texto pelado. */
+function PantallaInicial() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black">
+      <img src="/logo.png" alt="" aria-hidden="true" className="h-16 w-auto object-contain latido-marca" />
+      <p role="status" className="text-xs font-bold uppercase tracking-[0.4em] text-brand-500">
+        Cargando Thaiger
+      </p>
+    </div>
+  );
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -50,20 +62,30 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  /** Vuelve a leer la sesión: útil tras un cambio de contraseña o de rol. */
+  const refresh = useCallback(async () => {
+    const session = await auth.getSession();
+    setUser(session);
+    return session;
+  }, []);
+
   const updateProfile = useCallback(
     async (updates) => {
       if (!user) return { success: false, error: new Error('No hay sesión activa.') };
+
       try {
         await auth.updateProfile(user.id, {
           name: updates.name ?? user.name,
           avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : user.avatar_url,
         });
+
         // Reflejamos el cambio de inmediato (la foto del Navbar se actualiza al instante).
         setUser((prev) => ({
           ...prev,
           name: updates.name ?? prev.name,
           avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : prev.avatar_url,
         }));
+
         return { success: true };
       } catch (error) {
         console.error('Error al actualizar el perfil:', error);
@@ -73,21 +95,24 @@ export const AuthProvider = ({ children }) => {
     [user]
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 uppercase tracking-widest font-bold">
-        Cargando Thaiger...
-      </div>
-    );
-  }
-
-  return (
-    <AuthContext.Provider
-      value={{ user, isAuthenticated: Boolean(user), isAdmin: user?.role === 'admin', login, register, logout, updateProfile }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      isAuthenticated: Boolean(user),
+      isAdmin: user?.role === 'admin',
+      login,
+      register,
+      logout,
+      refresh,
+      updateProfile,
+    }),
+    [user, loading, login, register, logout, refresh, updateProfile]
   );
+
+  if (loading) return <PantallaInicial />;
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

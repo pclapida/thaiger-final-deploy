@@ -1,217 +1,649 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, User, ShoppingCart, LogIn, UserPlus, LogOut, Menu, X } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  AnimatePresence,
+  motion,
+  useMotionValueEvent,
+  useReducedMotion,
+  useScroll,
+} from 'framer-motion';
+import {
+  ChevronDown,
+  LogIn,
+  LogOut,
+  Megaphone,
+  Menu,
+  Package,
+  Search,
+  Shield,
+  ShoppingCart,
+  User,
+  UserPlus,
+  X,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useSettings } from '../context/SettingsContext';
+import { backdrop, drawerRight, resolveVariants, SPRING } from '../lib/motion';
+import { sanitizeImageUrl, sanitizeText } from '../lib/security';
 
-const NavLink = ({ to, children }) => {
-  const location = useLocation();
-  const isActive = (location.pathname.startsWith(to) && to !== '/') || location.pathname === to;
-  
-  return (
-    <Link to={to} className="relative px-4 py-2 flex flex-col items-center justify-center group h-14 min-w-[5rem] overflow-visible">
-      <span className={`text-sm font-bold uppercase transition-transform duration-300 z-10 ${isActive ? 'text-orange-500 -translate-y-4' : 'text-white group-hover:-translate-y-4 group-hover:text-orange-400'}`}>
-        {children}
-      </span>
-      
-      {/* Indicador Musculoso Activo */}
-      {isActive && (
-        <motion.img 
-            src="/loader.png" 
-            alt="Active Icon" 
-            className="absolute -bottom-2 w-12 h-12 object-contain mix-blend-screen brightness-200 contrast-125 z-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, y: [0, -4, 0] }}
-            transition={{ 
-                opacity: { duration: 0.2 },
-                y: { repeat: Infinity, duration: 1, ease: "easeInOut" }
-            }}
-        />
-      )}
-      
-      {/* Indicador Hover Fantasma */}
-      {!isActive && (
-         <img 
-            src="/loader.png" 
-            alt="Hover Icon" 
-            className="absolute -bottom-2 w-12 h-12 object-contain opacity-0 group-hover:opacity-40 transition-all duration-300 translate-y-4 group-hover:translate-y-0 mix-blend-screen brightness-200 z-0"
-         />
-      )}
-    </Link>
-  );
-};
+/** Enlaces principales. `Admin` se añade sólo si la sesión es de administración. */
+const ENLACES = [
+  { to: '/shop', etiqueta: 'Tienda' },
+  { to: '/brands', etiqueta: 'Marcas' },
+  { to: '/offers', etiqueta: 'Ofertas' },
+];
+
+const CLAVE_AVISO = 'thaiger_aviso_cerrado';
+
+const SELECTOR_FOCO =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** ¿Este enlace corresponde a la ruta que se está viendo? */
+function esRutaActiva(pathname, to) {
+  if (to === '/') return pathname === '/';
+  // La ficha de producto sigue siendo "Tienda" a efectos de navegación.
+  if (to === '/shop' && pathname.startsWith('/product')) return true;
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+/** Texto recordado como cerrado en esta pestaña (vacío si no hay ninguno). */
+function avisoRecordado() {
+  try {
+    return window.sessionStorage?.getItem(CLAVE_AVISO) || '';
+  } catch {
+    return '';
+  }
+}
 
 export default function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, isAuthenticated, logout } = useAuth();
-  const { cartItems } = useCart();
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
+  const reducido = useReducedMotion();
 
-  const cartItemsCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { cartItems } = useCart();
+  const { settings } = useSettings();
 
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  const idBase = useId();
+  const cabeceraRef = useRef(null);
+  const cajonRef = useRef(null);
+  const botonMenuRef = useRef(null);
+  const zonaUsuarioRef = useRef(null);
 
-  // El menú móvil se cierra solo al cambiar de página (ajuste durante el render,
-  // no en un efecto, para no encadenar renders extra).
-  const [menuPath, setMenuPath] = useState(location.pathname);
-  if (menuPath !== location.pathname) {
-    setMenuPath(location.pathname);
-    setIsMenuOpen(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [menuUsuario, setMenuUsuario] = useState(false);
+
+  // ------------------------------------------------------------ compactado
+  // `useScroll` no provoca render: sólo se cambia el estado al cruzar el umbral.
+  const { scrollY } = useScroll();
+  const [compacta, setCompacta] = useState(() => (globalThis.scrollY || 0) > 40);
+  useMotionValueEvent(scrollY, 'change', (valor) => setCompacta(valor > 40));
+
+  // ------------------------------------------------------------ aviso superior
+  const textoAviso = settings?.banner?.active
+    ? sanitizeText(settings.banner.text, { maxLength: 160 })
+    : '';
+
+  const [avisoCerrado, setAvisoCerrado] = useState(
+    () => Boolean(textoAviso) && avisoRecordado() === textoAviso
+  );
+
+  // Si el administrador cambia el texto, el aviso vuelve a mostrarse aunque
+  // se hubiera cerrado (ajuste durante el render, no en un efecto).
+  const [avisoEspejo, setAvisoEspejo] = useState(textoAviso);
+  if (avisoEspejo !== textoAviso) {
+    setAvisoEspejo(textoAviso);
+    setAvisoCerrado(Boolean(textoAviso) && avisoRecordado() === textoAviso);
   }
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const mostrarAviso = Boolean(textoAviso) && !avisoCerrado;
+
+  const cerrarAviso = () => {
+    setAvisoCerrado(true);
+    try {
+      window.sessionStorage?.setItem(CLAVE_AVISO, textoAviso);
+    } catch {
+      // Sin sessionStorage (modo privado) el aviso simplemente vuelve al recargar.
+    }
   };
 
-  const submitSearch = () => {
-    if (searchQuery.trim() === '') return;
-    navigate('/shop', { state: { search: searchQuery.trim() } });
-    setSearchQuery('');
-    setIsMenuOpen(false);
+  // ------------------------------------------------- altura real de la cabecera
+  // El aviso de la tienda vive DENTRO del `<header>` fijo, así que la barra no
+  // mide siempre 5rem. Se publica la altura medida en `--alto-cabecera` para
+  // que todo lo `sticky` de las demás páginas se coloque justo debajo:
+  //   top-[calc(var(--alto-cabecera,5rem)+0.5rem)]
+  // Se escribe directamente en el DOM —nada de estado— para no provocar un
+  // render por cada píxel que cambie durante la transición de compactado.
+  useEffect(() => {
+    const nodo = cabeceraRef.current;
+    if (!nodo) return undefined;
+
+    const raiz = document.documentElement;
+    const publicar = () => {
+      const alto = Math.round(nodo.getBoundingClientRect().height);
+      if (alto > 0) raiz.style.setProperty('--alto-cabecera', `${alto}px`);
+    };
+
+    publicar();
+
+    // Sin ResizeObserver (jsdom, navegadores viejos) basta con el redimensionado.
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', publicar);
+      return () => {
+        window.removeEventListener('resize', publicar);
+        raiz.style.removeProperty('--alto-cabecera');
+      };
+    }
+
+    const observador = new ResizeObserver(publicar);
+    observador.observe(nodo);
+    return () => {
+      observador.disconnect();
+      raiz.style.removeProperty('--alto-cabecera');
+    };
+  }, []);
+
+  // ------------------------------------------------- cierre al cambiar de ruta
+  const [rutaEspejo, setRutaEspejo] = useState(location.pathname);
+  if (rutaEspejo !== location.pathname) {
+    setRutaEspejo(location.pathname);
+    if (menuAbierto) setMenuAbierto(false);
+    if (menuUsuario) setMenuUsuario(false);
+  }
+
+  // ------------------------------------------- cajón: foco, Escape y scroll
+  useEffect(() => {
+    if (!menuAbierto) return undefined;
+
+    const scrollPrevio = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const alPulsar = (evento) => {
+      if (evento.key === 'Escape') {
+        setMenuAbierto(false);
+        botonMenuRef.current?.focus();
+        return;
+      }
+      if (evento.key !== 'Tab') return;
+
+      const focales = cajonRef.current?.querySelectorAll(SELECTOR_FOCO);
+      if (!focales || focales.length === 0) return;
+
+      const primero = focales[0];
+      const ultimo = focales[focales.length - 1];
+
+      if (evento.shiftKey && document.activeElement === primero) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
+    };
+
+    document.addEventListener('keydown', alPulsar);
+    // Se enfoca el panel, no el buscador: en un móvil eso abriría el teclado.
+    const cuadro = requestAnimationFrame(() => cajonRef.current?.focus());
+
+    return () => {
+      document.body.style.overflow = scrollPrevio;
+      document.removeEventListener('keydown', alPulsar);
+      cancelAnimationFrame(cuadro);
+    };
+  }, [menuAbierto]);
+
+  // --------------------------------------- menú de usuario: fuera y Escape
+  useEffect(() => {
+    if (!menuUsuario) return undefined;
+
+    const alClicFuera = (evento) => {
+      if (!zonaUsuarioRef.current?.contains(evento.target)) setMenuUsuario(false);
+    };
+    const alEscape = (evento) => {
+      if (evento.key === 'Escape') setMenuUsuario(false);
+    };
+
+    document.addEventListener('mousedown', alClicFuera);
+    document.addEventListener('keydown', alEscape);
+    return () => {
+      document.removeEventListener('mousedown', alClicFuera);
+      document.removeEventListener('keydown', alEscape);
+    };
+  }, [menuUsuario]);
+
+  // ------------------------------------------------------------------ datos
+  const enlaces = isAdmin ? [...ENLACES, { to: '/dashboard', etiqueta: 'Admin', admin: true }] : ENLACES;
+  const unidades = cartItems.reduce((total, articulo) => total + (Number(articulo.quantity) || 0), 0);
+  const avatar = sanitizeImageUrl(user?.avatar_url);
+  const nombreCorto = (user?.name || user?.email || '').split(' ')[0] || 'Mi cuenta';
+
+  const enviarBusqueda = (evento) => {
+    evento.preventDefault();
+    const termino = busqueda.trim();
+    if (!termino) return;
+
+    navigate('/shop', { state: { search: termino } });
+    setBusqueda('');
+    setMenuAbierto(false);
   };
 
-  const handleSearch = (e) => {
-    if (e.key === 'Enter') submitSearch();
+  const cerrarSesion = async () => {
+    setMenuUsuario(false);
+    setMenuAbierto(false);
+    try {
+      await logout();
+      toast.success('Sesión cerrada');
+      navigate('/');
+    } catch {
+      toast.error('No se pudo cerrar la sesión.');
+    }
   };
+
+  const alturaBarra = compacta ? 'h-16' : 'h-navbar';
 
   return (
-    <motion.nav
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-black/95 shadow-md shadow-orange-500/20 py-2' : 'bg-black/60 py-4'}`}
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div className="container mx-auto px-4 flex flex-col gap-4">
+    <>
+      <motion.header
+        ref={cabeceraRef}
+        initial={reducido ? false : { y: -90 }}
+        animate={{ y: 0 }}
+        transition={reducido ? { duration: 0 } : SPRING.suave}
+        className="no-imprimir fixed inset-x-0 top-0 z-50"
+      >
+        {/* ------------------------------------------------ aviso de la tienda */}
+        {mostrarAviso && (
+          <motion.div
+            initial={reducido ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex h-11 items-center gap-2 bg-brand-600 px-3 text-white sm:h-9"
+            role="region"
+            aria-label="Aviso de la tienda"
+          >
+            <Megaphone size={14} className="shrink-0 opacity-90" aria-hidden="true" />
+            <p className="min-w-0 flex-1 truncate text-center text-[11px] font-semibold tracking-wide sm:text-xs">
+              {textoAviso}
+            </p>
+            <button
+              type="button"
+              onClick={cerrarAviso}
+              aria-label="Cerrar aviso"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-black/20 sm:h-9 sm:w-9"
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          </motion.div>
+        )}
 
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/">
-            <img src="/logo.png" alt="Thaiger" className="h-10 object-contain" />
-          </Link>
-
-          {/* Links Centrales */}
-          <div className="hidden md:flex items-center gap-8 flex-1 justify-center ml-8">
-            <div className="flex gap-6">
-              {user?.role === 'admin' && (
-                <NavLink to="/dashboard">Admin</NavLink>
-              )}
-              <NavLink to="/shop">Tienda</NavLink>
-              <NavLink to="/brands">Marcas</NavLink>
-              <NavLink to="/offers">Ofertas</NavLink>
-            </div>
-
-            <div className="relative w-full max-w-xs lg:max-w-md hidden sm:block">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearch}
-                placeholder="BUSCAR..."
-                className="w-full bg-white/10 border border-transparent focus:border-orange-500 rounded-sm py-1 px-4 pl-10 text-white placeholder-gray-400 focus:outline-none focus:bg-black transition-all text-sm tracking-wider"
+        {/* --------------------------------------------------------- barra */}
+        <div
+          className={`border-b backdrop-blur transition-colors duration-300 ${
+            compacta
+              ? 'border-brand-600/25 bg-carbon-950/95 shadow-lg shadow-black/60'
+              : 'border-white/5 bg-carbon-950/80'
+          }`}
+        >
+          <div
+            className={`mx-auto flex w-full max-w-7xl items-center gap-1 px-3 transition-all duration-300 sm:gap-3 sm:px-4 ${alturaBarra}`}
+          >
+            {/* Logotipo */}
+            <Link
+              to="/"
+              className="flex shrink-0 items-center gap-2 rounded-sm"
+              aria-label="Thaiger Supplements, ir al inicio"
+            >
+              <img
+                src="/logo.png"
+                alt=""
+                aria-hidden="true"
+                className={`object-contain transition-all duration-300 ${compacta ? 'h-8' : 'h-10'}`}
               />
-              <Search className="absolute left-3 top-1.5 text-gray-400 h-4 w-4" />
-            </div>
-          </div>
-
-          {/* Zona de Usuario (Dinámica) */}
-          <div className="flex items-center gap-4 text-white">
-
-            {isAuthenticated ? (
-              // === SI ESTÁ LOGUEADO: Icono de Usuario y Logout ===
-              <div className="flex items-center gap-3">
-                <Link to="/profile">
-                  <motion.button whileHover={{ scale: 1.1, color: '#ff8c00' }} className="flex items-center justify-center p-0.5 rounded-full bg-gray-900 border border-gray-700 hover:border-orange-500 transition-colors overflow-hidden h-9 w-9">
-                    {user?.avatar_url ? (
-                      <img src={user.avatar_url} alt="User Settings" className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <User className="h-5 w-5 m-auto" />
-                    )}
-                  </motion.button>
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs font-bold uppercase text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1"
-                  title="Cerrar Sesión"
-                >
-                  <LogOut size={16} /> <span className="hidden sm:inline">Salir</span>
-                </button>
-              </div>
-            ) : (
-              // === SI NO ESTÁ LOGUEADO: Botones Login/Register permanentemente visibles ===
-              <div className="flex items-center gap-2 mr-2">
-                <Link to="/login" className="text-xs font-bold uppercase px-3 py-1.5 border border-transparent hover:text-orange-500 transition-colors flex items-center gap-1">
-                  <LogIn size={14} className="hidden sm:block" /> Entrar
-                </Link>
-                <Link to="/register" className="text-xs font-bold uppercase px-3 py-1.5 bg-orange-600 text-white hover:bg-orange-700 rounded transition-colors flex items-center gap-1">
-                  <UserPlus size={14} className="hidden sm:block" /> Registro
-                </Link>
-              </div>
-            )}
-
-            {/* Carrito (Siempre visible) */}
-            <Link to="/cart">
-              <motion.button whileHover={{ scale: 1.1, color: '#ff8c00' }} className="relative p-2 ml-2">
-                <ShoppingCart className="h-6 w-6" />
-                {cartItemsCount > 0 && (
-                  <div className="absolute top-0 -right-1 bg-orange-600 text-[10px] rounded-full w-4 h-4 flex items-center justify-center text-white font-bold">
-                    {cartItemsCount}
-                  </div>
-                )}
-              </motion.button>
+              <span className="hidden text-lg font-black italic tracking-tighter text-white sm:inline">
+                THAIGER
+              </span>
             </Link>
 
-            {/* Botón de menú (sólo móvil) */}
-            <button
-              onClick={() => setIsMenuOpen((open) => !open)}
-              className="md:hidden p-2 text-white hover:text-orange-500 transition-colors"
-              aria-label={isMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
-              aria-expanded={isMenuOpen}
+            {/* Enlaces de escritorio */}
+            <nav aria-label="Navegación principal" className="hidden items-center lg:flex">
+              {enlaces.map((enlace) => {
+                const activo = esRutaActiva(location.pathname, enlace.to);
+                return (
+                  <Link
+                    key={enlace.to}
+                    to={enlace.to}
+                    aria-current={activo ? 'page' : undefined}
+                    className={`relative flex h-11 items-center gap-1.5 px-4 text-sm font-bold uppercase tracking-wide transition-colors ${
+                      activo ? 'text-brand-500' : 'text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    {enlace.admin && <Shield size={14} aria-hidden="true" />}
+                    {enlace.etiqueta}
+                    {activo && (
+                      <motion.span
+                        layoutId="subrayado-navegacion"
+                        transition={reducido ? { duration: 0 } : SPRING.firme}
+                        className="absolute inset-x-3 bottom-1 h-[3px] rounded-full bg-brand-500"
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Buscador de escritorio. El texto va a 16px en móvil (`text-base`)
+                porque por debajo de eso Safari iOS hace zoom al enfocar. */}
+            <form
+              role="search"
+              onSubmit={enviarBusqueda}
+              className="mx-2 hidden min-w-0 flex-1 md:block lg:max-w-sm"
             >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+              <label htmlFor={`${idBase}-buscar`} className="sr-only">
+                Buscar productos
+              </label>
+              <div className="relative">
+                <Search
+                  size={16}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                />
+                <input
+                  id={`${idBase}-buscar`}
+                  type="search"
+                  value={busqueda}
+                  onChange={(evento) => setBusqueda(evento.target.value)}
+                  placeholder="Buscar productos, marcas..."
+                  className="h-10 w-full rounded-sm border border-carbon-600 bg-white/5 pl-9 pr-3 text-base text-white transition-colors placeholder:text-gray-400 focus:border-brand-500 focus:bg-carbon-950 focus:outline-none sm:text-sm"
+                />
+              </div>
+            </form>
+
+            {/* Zona de usuario, carrito y menú */}
+            <div className="ml-auto flex items-center gap-1">
+              {isAuthenticated ? (
+                <div className="relative" ref={zonaUsuarioRef}>
+                  <button
+                    type="button"
+                    onClick={() => setMenuUsuario((abierto) => !abierto)}
+                    aria-expanded={menuUsuario}
+                    aria-haspopup="true"
+                    aria-controls={`${idBase}-menu-usuario`}
+                    // El nombre se oculta en móvil, así que la etiqueta accesible
+                    // no puede depender del texto visible.
+                    aria-label={`Cuenta de ${nombreCorto}`}
+                    className="flex h-11 items-center gap-2 rounded-full px-1.5 text-white transition-colors hover:bg-white/5 sm:pr-3"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-carbon-600 bg-carbon-800">
+                      {avatar ? (
+                        <img src={avatar} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+                      ) : (
+                        <User size={18} aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="hidden max-w-28 truncate text-sm font-bold sm:inline">
+                      {nombreCorto}
+                    </span>
+                    <ChevronDown
+                      size={14}
+                      aria-hidden="true"
+                      className={`hidden transition-transform sm:block ${menuUsuario ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {menuUsuario && (
+                      <motion.div
+                        id={`${idBase}-menu-usuario`}
+                        initial={reducido ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={reducido ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+                        transition={{ duration: 0.16 }}
+                        className="superficie absolute right-0 top-full z-50 mt-2 w-56 origin-top-right overflow-hidden rounded-xl shadow-2xl shadow-black/70"
+                      >
+                        <div className="border-b border-carbon-600 px-4 py-3">
+                          <p className="truncate text-sm font-bold text-white">{user?.name || 'Cuenta'}</p>
+                          <p className="truncate text-[11px] text-gray-400">{user?.email}</p>
+                        </div>
+
+                        <Link
+                          to="/profile"
+                          className="flex min-h-11 items-center gap-3 px-4 text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-brand-500"
+                        >
+                          <User size={16} aria-hidden="true" /> Mi perfil
+                        </Link>
+                        <Link
+                          to="/profile"
+                          state={{ tab: 'pedidos' }}
+                          className="flex min-h-11 items-center gap-3 px-4 text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-brand-500"
+                        >
+                          <Package size={16} aria-hidden="true" /> Mis pedidos
+                        </Link>
+                        {isAdmin && (
+                          <Link
+                            to="/dashboard"
+                            className="flex min-h-11 items-center gap-3 px-4 text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-brand-500"
+                          >
+                            <Shield size={16} aria-hidden="true" /> Panel de administración
+                          </Link>
+                        )}
+                        <button
+                          type="button"
+                          onClick={cerrarSesion}
+                          className="flex min-h-11 w-full items-center gap-3 border-t border-carbon-600 px-4 text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-red-500"
+                        >
+                          <LogOut size={16} aria-hidden="true" /> Cerrar sesión
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="hidden items-center gap-2 sm:flex">
+                  <Link
+                    to="/login"
+                    className="flex min-h-11 items-center gap-1.5 px-3 text-xs font-bold uppercase tracking-wide text-gray-300 transition-colors hover:text-brand-500"
+                  >
+                    <LogIn size={15} aria-hidden="true" /> Entrar
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="flex min-h-11 items-center gap-1.5 rounded-sm bg-brand-600 px-4 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-700"
+                  >
+                    <UserPlus size={15} aria-hidden="true" /> Registro
+                  </Link>
+                </div>
+              )}
+
+              {/* Carrito */}
+              <Link
+                to="/cart"
+                aria-label={`Carrito de compras, ${unidades} ${unidades === 1 ? 'artículo' : 'artículos'}`}
+                className="relative flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/5 hover:text-brand-500"
+              >
+                <ShoppingCart size={22} aria-hidden="true" />
+                {unidades > 0 && (
+                  <span className="absolute right-1 top-1 flex h-5 min-w-5 items-center justify-center overflow-hidden rounded-full bg-brand-600 px-1 text-[10px] font-black leading-none text-white">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span
+                        key={unidades}
+                        initial={reducido ? { opacity: 0 } : { y: -10, opacity: 0, scale: 0.6 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        exit={reducido ? { opacity: 0 } : { y: 10, opacity: 0, scale: 0.6 }}
+                        transition={reducido ? { duration: 0.12 } : SPRING.rebote}
+                      >
+                        {unidades > 99 ? '99+' : unidades}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                )}
+              </Link>
+
+              {/* Botón del cajón (móvil y tableta) */}
+              <button
+                type="button"
+                ref={botonMenuRef}
+                onClick={() => setMenuAbierto(true)}
+                aria-expanded={menuAbierto}
+                aria-controls={`${idBase}-cajon`}
+                aria-label="Abrir menú"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/5 hover:text-brand-500 lg:hidden"
+              >
+                <Menu size={22} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
+      </motion.header>
 
-        {/* === MENÚ MÓVIL === */}
-        {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-800 pt-4 pb-2 space-y-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearch}
-                placeholder="BUSCAR PRODUCTOS..."
-                className="w-full bg-white/10 border border-transparent focus:border-orange-500 rounded-sm py-2 px-4 pl-10 text-white placeholder-gray-400 focus:outline-none focus:bg-black transition-all text-sm tracking-wider"
-              />
-              <Search className="absolute left-3 top-2.5 text-gray-400 h-4 w-4" />
-            </div>
+      {/* Espaciador del aviso: empuja el contenido sin tocar el `pt-navbar`
+          de <main>, que sólo compensa la altura de la barra. */}
+      {mostrarAviso && <div aria-hidden="true" className="h-11 shrink-0 sm:h-9" />}
 
-            <div className="flex flex-col">
-              {user?.role === 'admin' && (
-                <Link to="/dashboard" className="py-3 text-sm font-bold uppercase text-orange-500 border-b border-gray-800">
-                  Admin
-                </Link>
-              )}
-              <Link to="/shop" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Tienda</Link>
-              <Link to="/brands" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Marcas</Link>
-              <Link to="/offers" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Ofertas</Link>
-              {isAuthenticated && (
-                <Link to="/profile" className="py-3 text-sm font-bold uppercase text-white border-b border-gray-800">Mi Perfil</Link>
-              )}
-            </div>
-          </div>
+      {/* ------------------------------------------------------------ cajón */}
+      <AnimatePresence>
+        {menuAbierto && (
+          <>
+            <motion.div
+              key="fondo-cajon"
+              variants={resolveVariants(backdrop, reducido)}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={() => setMenuAbierto(false)}
+              aria-hidden="true"
+              className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm lg:hidden"
+            />
+
+            <motion.div
+              key="cajon"
+              id={`${idBase}-cajon`}
+              ref={cajonRef}
+              tabIndex={-1}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menú de navegación"
+              variants={resolveVariants(drawerRight, reducido)}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="custom-scrollbar fixed inset-y-0 right-0 z-[90] flex w-[min(21rem,86vw)] flex-col overflow-y-auto border-l border-carbon-600 bg-carbon-900 focus:outline-none lg:hidden"
+            >
+              <div className="flex h-navbar shrink-0 items-center justify-between border-b border-carbon-600 px-4">
+                <span className="text-base font-black italic tracking-tighter text-white">THAIGER</span>
+                <button
+                  type="button"
+                  onClick={() => setMenuAbierto(false)}
+                  aria-label="Cerrar menú"
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-white/5 hover:text-brand-500"
+                >
+                  <X size={22} aria-hidden="true" />
+                </button>
+              </div>
+
+              <form role="search" onSubmit={enviarBusqueda} className="border-b border-carbon-600 p-4">
+                <label htmlFor={`${idBase}-buscar-movil`} className="sr-only">
+                  Buscar productos
+                </label>
+                <div className="relative">
+                  <Search
+                    size={16}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  />
+                  <input
+                    id={`${idBase}-buscar-movil`}
+                    type="search"
+                    value={busqueda}
+                    onChange={(evento) => setBusqueda(evento.target.value)}
+                    placeholder="Buscar productos..."
+                    className="h-11 w-full rounded-sm border border-carbon-600 bg-carbon-950 pl-9 pr-3 text-base text-white placeholder:text-gray-400 focus:border-brand-500 focus:outline-none sm:text-sm"
+                  />
+                </div>
+              </form>
+
+              <nav aria-label="Navegación del menú" className="flex flex-col p-2">
+                {enlaces.map((enlace) => {
+                  const activo = esRutaActiva(location.pathname, enlace.to);
+                  return (
+                    <Link
+                      key={enlace.to}
+                      to={enlace.to}
+                      aria-current={activo ? 'page' : undefined}
+                      className={`flex min-h-12 items-center gap-3 rounded-sm px-4 text-sm font-bold uppercase tracking-wide transition-colors ${
+                        activo
+                          ? 'bg-brand-600/10 text-brand-500'
+                          : 'text-gray-200 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      {enlace.admin && <Shield size={16} aria-hidden="true" />}
+                      {enlace.etiqueta}
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              <div className="mt-auto border-t border-carbon-600 p-4">
+                {isAuthenticated ? (
+                  <div className="space-y-1">
+                    <div className="mb-3 flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-carbon-600 bg-carbon-800">
+                        {avatar ? (
+                          <img src={avatar} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+                        ) : (
+                          <User size={18} aria-hidden="true" />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-white">
+                          {user?.name || 'Mi cuenta'}
+                        </span>
+                        <span className="block truncate text-[11px] text-gray-400">{user?.email}</span>
+                      </span>
+                    </div>
+
+                    <Link
+                      to="/profile"
+                      className="flex min-h-11 items-center gap-3 rounded-sm px-2 text-sm text-gray-300 hover:text-brand-500"
+                    >
+                      <User size={16} aria-hidden="true" /> Mi perfil
+                    </Link>
+                    <Link
+                      to="/profile"
+                      state={{ tab: 'pedidos' }}
+                      className="flex min-h-11 items-center gap-3 rounded-sm px-2 text-sm text-gray-300 hover:text-brand-500"
+                    >
+                      <Package size={16} aria-hidden="true" /> Mis pedidos
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={cerrarSesion}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-sm px-2 text-sm text-gray-400 hover:text-red-500"
+                    >
+                      <LogOut size={16} aria-hidden="true" /> Cerrar sesión
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Link
+                      to="/login"
+                      className="flex min-h-11 items-center justify-center gap-2 rounded-sm border border-carbon-600 text-xs font-bold uppercase tracking-widest text-gray-200 transition-colors hover:border-brand-500 hover:text-brand-500"
+                    >
+                      <LogIn size={15} aria-hidden="true" /> Entrar
+                    </Link>
+                    <Link
+                      to="/register"
+                      className="flex min-h-11 items-center justify-center gap-2 rounded-sm bg-brand-600 text-xs font-bold uppercase tracking-widest text-white transition-colors hover:bg-brand-700"
+                    >
+                      <UserPlus size={15} aria-hidden="true" /> Crear cuenta
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
         )}
-      </div>
-    </motion.nav>
+      </AnimatePresence>
+    </>
   );
 }

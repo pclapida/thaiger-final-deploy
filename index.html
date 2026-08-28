@@ -2,13 +2,39 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
     <title>Thaiger Supplements | Suplementos y Fitness</title>
-    <meta name="description" content="Tienda oficial Thaiger Supplements: proteinas, creatina, pre-entrenos y accesorios de las mejores marcas." />
+    <meta
+      name="description"
+      content="Tienda de demostracion de Thaiger Supplements: catalogo, carrito, checkout y panel de administracion. Productos, marcas y datos de ejemplo."
+    />
+
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Los buscadores no deben indexar una demo con datos de ejemplo. -->
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- Vista previa al compartir el enlace -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Thaiger Supplements" />
+    <meta
+      property="og:description"
+      content="Tienda de suplementacion deportiva. Sitio de demostracion con datos de ejemplo."
+    />
+    <meta property="og:image" content="/images/hero/thaiger-labs.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; color: #fff; background: #000; font-family: sans-serif">
+        Esta tienda necesita JavaScript activado para funcionar.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

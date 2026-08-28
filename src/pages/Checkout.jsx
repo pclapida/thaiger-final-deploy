@@ -1,244 +1,460 @@
-import React, { useState } from 'react';
-import Navbar from '../components/Navbar';
-import { MapPin, ShieldCheck, Landmark, CheckCircle, Copy, AlertCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
-import { orders as ordersApi } from '../services/api';
-import { formatPrice, computeCartTotals, getUnitPrice } from '../lib/pricing';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle,
+  Copy,
+  Landmark,
+  Lock,
+  MapPin,
+  ShieldCheck,
+  ShoppingCart,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
+import EmptyState from '../components/ui/EmptyState';
+import { TextField } from '../components/ui/Field';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+
+import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
+import { useSettings } from '../context/SettingsContext';
+import { orders as ordersApi } from '../services/api';
+import { computeCartTotals, formatPrice, getUnitPrice } from '../lib/pricing';
+import { fadeUp, resolveVariants } from '../lib/motion';
+
+const ENVIO_VACIO = { fullName: '', phone: '', address: '', city: '', zip: '' };
+
+const AVISO_INCOMPLETO = 'Por favor completa tu dirección de envío en todos los campos.';
+
+const PASOS = [
+  { id: 1, nombre: 'Envío' },
+  { id: 2, nombre: 'Pago' },
+  { id: 3, nombre: 'Confirmación' },
+];
+
+/** Sólo dígitos, para validar teléfono y código postal escritos con espacios. */
+function soloDigitos(valor) {
+  return String(valor ?? '').replace(/\D/g, '');
+}
+
+/** Una regla por campo: el mensaje se muestra debajo del propio campo. */
+const REGLAS = {
+  fullName: (valor) => {
+    if (!valor.trim()) return 'Escribe el nombre de quien recibe.';
+    if (valor.trim().length < 3) return 'El nombre es demasiado corto.';
+    return '';
+  },
+  phone: (valor) => {
+    const digitos = soloDigitos(valor);
+    if (!digitos) return 'Escribe un teléfono de contacto.';
+    if (digitos.length < 10) return 'El teléfono debe tener 10 dígitos.';
+    return '';
+  },
+  address: (valor) => {
+    if (!valor.trim()) return 'Escribe la calle y el número.';
+    if (valor.trim().length < 5) return 'La dirección es demasiado corta.';
+    return '';
+  },
+  city: (valor) => (valor.trim() ? '' : 'Escribe tu ciudad.'),
+  zip: (valor) => {
+    const digitos = soloDigitos(valor);
+    if (!digitos) return 'Escribe tu código postal.';
+    if (digitos.length !== 5) return 'El código postal son 5 dígitos.';
+    return '';
+  },
+};
+
+function validarEnvio(datos) {
+  const errores = {};
+  for (const [campo, regla] of Object.entries(REGLAS)) {
+    const mensaje = regla(datos[campo] ?? '');
+    if (mensaje) errores[campo] = mensaje;
+  }
+  return errores;
+}
+
 export default function Checkout() {
-    const { cartItems, clearCart } = useCart();
-    const { user } = useAuth();
-    const navigate = useNavigate();
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [formData, setFormData] = useState({
-        fullName: '', phone: '', address: '', city: '', zip: ''
-    });
-    
-    // Datos de la cuenta para la transferencia SPEI.
-    // El concepto se genera una sola vez por visita al checkout.
-    const speiData = React.useMemo(() => ({
-        banco: "BBVA Bancomer",
-        clabe: "012345678901234567",
-        beneficiario: "Thaiger Supplements MX",
-        concepto: `TH-${Math.floor(1000 + Math.random() * 9000)}`
-    }), []);
+  const navigate = useNavigate();
+  const reducido = useReducedMotion();
+  const { cartItems, clearCart } = useCart();
+  const { user } = useAuth();
+  const { settings } = useSettings();
 
-    // Mismos cálculos que el carrito (src/lib/pricing.js)
-    const { tier: currentTier, subtotal, shipping, total } = computeCartTotals(cartItems);
-    const getActivePrice = (item) => getUnitPrice(item, currentTier);
+  const [formulario, setFormulario] = useState(ENVIO_VACIO);
+  const [tocados, setTocados] = useState({});
+  const [intentado, setIntentado] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [copiada, setCopiada] = useState(false);
 
-    const handlePayment = async (e) => {
-        e.preventDefault();
-        if (!user?.id) {
-            toast.error("Debes iniciar sesión para finalizar tu compra.");
-            return;
-        }
-        if (!formData.fullName || !formData.address || !formData.phone || !formData.city || !formData.zip) {
-            toast.error("Por favor completa tu dirección de envío en todos los campos.");
-            return;
-        }
+  useDocumentTitle('Finalizar compra', 'Confirma tu dirección de envío y paga tu pedido por transferencia SPEI.');
 
-        setIsProcessing(true);
-        try {
-            const items = cartItems.map(item => ({
-                product_id: item.id,
-                product_name: item.name,
-                quantity: item.quantity,
-                price_at_purchase: getActivePrice(item)
-            }));
+  // Los datos bancarios salen de la configuración de la tienda, nunca del código.
+  const pago = settings?.payment || {};
+  const concepto = useMemo(() => `TH-${Math.floor(1000 + Math.random() * 9000)}`, []);
 
-            await ordersApi.create({
-                userId: user.id,
-                total,
-                shippingInfo: formData,
-                paymentInfo: { method: 'SPEI', concepto: speiData.concepto, banco: speiData.banco },
-                items
-            });
+  const { tier: nivel, subtotal, shipping: envio, savings: ahorro, total } = computeCartTotals(cartItems);
 
-            // El inventario se descuenta después de confirmar el pedido.
-            try {
-                await ordersApi.decrementStock(items);
-            } catch (stockError) {
-                console.warn("El pedido se guardó pero no se pudo descontar el inventario:", stockError);
-            }
+  const errores = useMemo(() => validarEnvio(formulario), [formulario]);
+  const envioCompleto = Object.keys(errores).length === 0;
+  const pasoActual = enviando ? 3 : envioCompleto ? 2 : 1;
 
-            toast.success(`¡Pedido registrado! Transfiere con el concepto ${speiData.concepto}`, { duration: 8000 });
-            clearCart();
-            navigate('/profile');
+  const temporizadorCopia = useRef(0);
+  useEffect(() => () => clearTimeout(temporizadorCopia.current), []);
 
-        } catch (error) {
-            console.error("Detalle del error de compra:", error);
-            toast.error(error.message || "Hubo un error al registrar el pedido. Intenta de nuevo.", { duration: 6000 });
-        } finally {
-            setIsProcessing(false);
-        }
-    };
+  const escribir = (campo) => (evento) => {
+    const { value } = evento.target;
+    setFormulario((previo) => ({ ...previo, [campo]: value }));
+    if (aviso === AVISO_INCOMPLETO) setAviso('');
+  };
 
-    // Si entran al checkout sin nada en cart
-    if (cartItems.length === 0 && !isProcessing) {
-        return (
-            <div className="bg-[#0A0A0A] min-h-screen text-white font-sans flex flex-col items-center justify-center">
-               <Navbar />
-               <h2 className="text-3xl font-bold mb-4">El carrito está vacío</h2>
-               <button onClick={() => navigate('/shop')} className="text-orange-500 hover:underline">Volver a la tienda</button>
-            </div>
-        );
+  const marcarTocado = (campo) => () => setTocados((previo) => ({ ...previo, [campo]: true }));
+
+  const errorDe = (campo) => ((tocados[campo] || intentado) && errores[campo]) || undefined;
+
+  const copiarClabe = async () => {
+    try {
+      await navigator.clipboard.writeText(String(pago.clabe || ''));
+      setCopiada(true);
+      toast.success('CLABE copiada');
+      clearTimeout(temporizadorCopia.current);
+      temporizadorCopia.current = setTimeout(() => setCopiada(false), 2500);
+    } catch {
+      toast.error('Tu navegador bloqueó el portapapeles. Copia la CLABE a mano.');
+    }
+  };
+
+  const pagar = async (evento) => {
+    evento.preventDefault();
+    setIntentado(true);
+
+    if (!user?.id) {
+      setAviso('Necesitas iniciar sesión para finalizar tu compra.');
+      return;
+    }
+    if (!envioCompleto) {
+      setAviso(AVISO_INCOMPLETO);
+      return;
     }
 
+    setAviso('');
+    setEnviando(true);
+
+    // Sólo se manda qué y cuánto: el backend recalcula precios, envío y total
+    // contra el catálogo, así que un carrito manipulado no cambia el cobro.
+    const lineas = cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity }));
+
+    try {
+      const pedido = await ordersApi.create({
+        userId: user.id,
+        shippingInfo: formulario,
+        paymentInfo: { concepto, banco: pago.bank },
+        items: lineas,
+      });
+
+      try {
+        await ordersApi.decrementStock(lineas);
+      } catch {
+        // El pedido ya quedó registrado; el inventario lo corrige el panel.
+      }
+
+      toast.success(
+        `¡Pedido registrado! Transfiere ${formatPrice(pedido?.total ?? total)} con el concepto ${concepto}.`,
+        { duration: 8000 }
+      );
+      clearCart();
+      navigate('/profile');
+    } catch (error) {
+      // El backend responde en español (falta de stock, dirección incompleta...).
+      setAviso(error?.message || 'No pudimos registrar tu pedido. Inténtalo de nuevo.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  if (cartItems.length === 0 && !enviando) {
     return (
-        <div className="bg-[#0A0A0A] min-h-screen text-white font-sans selection:bg-orange-500 selection:text-black">
-            <Navbar />
-            
-            <div className="container mx-auto pt-32 px-4 pb-20">
-                <h1 className="text-3xl font-extrabold uppercase tracking-widest text-orange-500 mb-8 flex items-center gap-3">
-                    <ShieldCheck /> Finalizar Compra
-                </h1>
-
-                <div className="flex flex-col lg:flex-row gap-12">
-                    
-                    {/* === COLUMNA IZQUIERDA: FORMULARIOS === */}
-                    <div className="flex-1 space-y-8">
-                        
-                        {/* 1. Dirección de Envío */}
-                        <section className="bg-[#111] p-6 rounded-sm border border-gray-800 relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-600"></div>
-                            <h2 className="text-xl font-bold uppercase tracking-wider mb-6 flex items-center gap-2">
-                                <MapPin size={20} className="text-orange-500"/> Información de Envío
-                            </h2>
-                            <form className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold text-gray-500">Nombre Completo</label>
-                                    <input value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} type="text" className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" placeholder="Ej: Juan Pérez" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold text-gray-500">Teléfono</label>
-                                    <input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} type="tel" className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" placeholder="+52 55 1234 5678" />
-                                </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <label className="text-xs uppercase font-bold text-gray-500">Dirección (Calle y Número)</label>
-                                    <input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} type="text" className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" placeholder="Av. Revolución 123" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold text-gray-500">Ciudad</label>
-                                    <input value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} type="text" className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" placeholder="CDMX / MTY / GDL" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs uppercase font-bold text-gray-500">Código Postal</label>
-                                    <input value={formData.zip} onChange={e => setFormData({...formData, zip: e.target.value})} type="text" className="w-full bg-[#0A0A0A] border border-gray-700 p-3 text-white focus:border-orange-500 focus:outline-none transition-colors rounded-sm" placeholder="00000" />
-                                </div>
-                            </form>
-                        </section>
-
-                        {/* 2. Método de Pago - Transferencia SPEI */}
-                        <section className="bg-[#111] p-6 rounded-sm border border-gray-800 relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-1 h-full bg-orange-600"></div>
-                            <h2 className="text-xl font-bold uppercase tracking-wider mb-6 flex items-center gap-2">
-                                <Landmark size={20} className="text-orange-500"/> Pago vía Transferencia (SPEI)
-                            </h2>
-
-                            <div 
-                                className="space-y-6"
-                            >
-                                <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded text-sm text-gray-300 flex items-start gap-4 mb-6">
-                                    <AlertCircle className="text-orange-500 shrink-0 mt-0.5" />
-                                    <p>Tu pedido se apartará una vez que completes el formulario. Para que sea procesado, <strong>debes realizar la transferencia SPEI por el monto total</strong> a la siguiente cuenta y colocar el <span className="text-white font-bold">Número de Concepto</span> indicado.</p>
-                                </div>
-
-                                <div className="bg-[#0A0A0A] p-6 border border-gray-800 rounded-sm font-mono text-sm space-y-4">
-                                    <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-                                        <span className="text-gray-500 uppercase font-bold text-xs">Banco</span>
-                                        <span className="text-white font-bold text-lg">{speiData.banco}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-                                        <span className="text-gray-500 uppercase font-bold text-xs">Beneficiario</span>
-                                        <span className="text-white text-base">{speiData.beneficiario}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-                                        <span className="text-gray-500 uppercase font-bold text-xs">CLABE Interbancaria</span>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-orange-500 font-extrabold text-xl tracking-widest">{speiData.clabe}</span>
-                                            <button
-                                                type="button"
-                                                title="Copiar CLABE"
-                                                onClick={async () => {
-                                                    try {
-                                                        await navigator.clipboard.writeText(speiData.clabe);
-                                                        toast.success('CLABE copiada');
-                                                    } catch {
-                                                        toast.error('Tu navegador bloqueó el portapapeles');
-                                                    }
-                                                }}
-                                                className="text-gray-500 hover:text-orange-500 transition-colors"
-                                            >
-                                                <Copy size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between items-center pt-2">
-                                        <span className="text-gray-500 uppercase font-bold text-xs">Concepto a ingresar</span>
-                                        <span className="bg-orange-600 text-black font-black px-3 py-1 rounded-sm text-lg tracking-widest">{speiData.concepto}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* === COLUMNA DERECHA: RESUMEN (Sticky) === */}
-                    <div className="lg:w-96 shrink-0">
-                        <div className="bg-[#111] p-6 rounded-sm border border-gray-800 sticky top-32">
-                            <h3 className="text-lg font-bold uppercase tracking-widest mb-6 border-b border-gray-800 pb-2">Resumen de Orden</h3>
-                            
-                            <div className="space-y-4 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                {cartItems.map((item, i) => (
-                                    <div key={i} className="flex justify-between items-start text-sm border-b border-gray-800 pb-2">
-                                        <div className="text-gray-300 w-2/3">
-                                            <span className="text-orange-500 font-bold">{item.quantity}x</span> <span className="uppercase text-xs font-semibold">{item.name}</span>
-                                        </div>
-                                        <div className="font-bold text-white whitespace-nowrap">{formatPrice(getActivePrice(item) * item.quantity)}</div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="space-y-2 text-sm text-gray-400 border-t border-gray-800 pt-4 mb-6">
-                                <div className="flex justify-between">
-                                    <span>Subtotal (Nivel {currentTier})</span>
-                                    <span>{formatPrice(subtotal)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Envío</span>
-                                    <span>{shipping === 0 ? <span className="text-green-500 uppercase font-bold text-xs">Gratis</span> : formatPrice(shipping)}</span>
-                                </div>
-                                <div className="flex justify-between text-white text-lg font-extrabold mt-4 pt-4 border-t border-gray-800 items-end">
-                                    <span className="uppercase tracking-widest text-sm">Total a Transferir</span>
-                                    <span className="text-orange-500 text-3xl tracking-tight">{formatPrice(total)}</span>
-                                </div>
-                            </div>
-
-                            <button 
-                                onClick={handlePayment}
-                                disabled={isProcessing}
-                                className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-black font-bold py-4 px-6 rounded-sm uppercase tracking-widest transition-all transform active:scale-95 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? (
-                                    <span className="animate-pulse">Procesando...</span>
-                                ) : (
-                                    <>
-                                        <CheckCircle size={20} /> Pagar Ahora
-                                    </>
-                                )}
-                            </button>
-                            
-                            <p className="text-[10px] text-gray-500 text-center mt-4 uppercase flex items-center justify-center gap-1">
-                                <ShieldCheck size={10} /> Tus datos de envío están protegidos
-                            </p>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
+      <div className="min-h-screen bg-carbon-950 text-white">
+        <div className="container mx-auto px-4 py-10 lg:py-14">
+          <h1 className="titulo-pagina mb-10 border-b border-gray-800 pb-5 font-extrabold uppercase tracking-wide text-brand-500">
+            Finalizar Compra
+          </h1>
+          <EmptyState
+            as="h2"
+            icon={ShoppingCart}
+            title="El carrito está vacío"
+            message="Agrega productos antes de pasar por caja."
+            actionLabel="Volver a la tienda"
+            actionTo="/shop"
+          />
         </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="min-h-screen bg-carbon-950 pb-16 text-white">
+      <div className="container mx-auto px-4 py-10 lg:py-14">
+        <h1 className="titulo-pagina flex items-center gap-3 font-extrabold uppercase tracking-wide text-brand-500">
+          <ShieldCheck className="shrink-0" aria-hidden="true" /> Finalizar Compra
+        </h1>
+
+        {/* --------------------------------------------------- paso a paso */}
+        <ol className="mt-8 flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-widest">
+          {PASOS.map((paso, indice) => {
+            const completado = paso.id < pasoActual;
+            const activo = paso.id === pasoActual;
+            return (
+              <li key={paso.id} className="flex items-center gap-3">
+                <span
+                  aria-current={activo ? 'step' : undefined}
+                  className={`flex items-center gap-2 rounded-sm px-3 py-2 ${
+                    activo
+                      ? 'bg-brand-600 text-white'
+                      : completado
+                        ? 'bg-brand-600/15 text-brand-500'
+                        : 'bg-carbon-800 text-gray-400'
+                  }`}
+                >
+                  <span className="grid h-5 w-5 place-items-center rounded-full border border-current text-[10px]">
+                    {completado ? <Check size={12} aria-hidden="true" /> : paso.id}
+                  </span>
+                  {paso.nombre}
+                </span>
+                {indice < PASOS.length - 1 && <span aria-hidden="true" className="h-px w-6 bg-gray-800" />}
+              </li>
+            );
+          })}
+        </ol>
+
+        <form onSubmit={pagar} noValidate className="mt-8 flex flex-col gap-8 lg:flex-row">
+          {/* ============================================ datos y pago */}
+          <div className="min-w-0 flex-1 space-y-6">
+            <motion.section
+              variants={resolveVariants(fadeUp, reducido)}
+              initial="hidden"
+              animate="visible"
+              className="superficie relative overflow-hidden rounded-xl p-6"
+            >
+              <span aria-hidden="true" className="absolute left-0 top-0 h-full w-1 bg-brand-600" />
+              <h2 className="mb-6 flex items-center gap-2 text-xl font-bold uppercase tracking-wider">
+                <MapPin size={20} className="text-brand-500" aria-hidden="true" /> Información de envío
+              </h2>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <TextField
+                  label="Nombre completo"
+                  required
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Ej: Juan Pérez"
+                  value={formulario.fullName}
+                  onChange={escribir('fullName')}
+                  onBlur={marcarTocado('fullName')}
+                  error={errorDe('fullName')}
+                />
+                <TextField
+                  label="Teléfono"
+                  required
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+52 55 1234 5678"
+                  value={formulario.phone}
+                  onChange={escribir('phone')}
+                  onBlur={marcarTocado('phone')}
+                  error={errorDe('phone')}
+                />
+                <TextField
+                  className="md:col-span-2"
+                  label="Dirección (calle y número)"
+                  required
+                  type="text"
+                  autoComplete="street-address"
+                  placeholder="Av. Revolución 123"
+                  value={formulario.address}
+                  onChange={escribir('address')}
+                  onBlur={marcarTocado('address')}
+                  error={errorDe('address')}
+                />
+                <TextField
+                  label="Ciudad"
+                  required
+                  type="text"
+                  autoComplete="address-level2"
+                  placeholder="CDMX / MTY / GDL"
+                  value={formulario.city}
+                  onChange={escribir('city')}
+                  onBlur={marcarTocado('city')}
+                  error={errorDe('city')}
+                />
+                <TextField
+                  label="Código postal"
+                  required
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  placeholder="00000"
+                  value={formulario.zip}
+                  onChange={escribir('zip')}
+                  onBlur={marcarTocado('zip')}
+                  error={errorDe('zip')}
+                />
+              </div>
+            </motion.section>
+
+            <motion.section
+              variants={resolveVariants(fadeUp, reducido)}
+              initial="hidden"
+              animate="visible"
+              transition={{ delay: reducido ? 0 : 0.08 }}
+              className="superficie relative overflow-hidden rounded-xl p-6"
+            >
+              <span aria-hidden="true" className="absolute left-0 top-0 h-full w-1 bg-brand-600" />
+              <h2 className="mb-6 flex items-center gap-2 text-xl font-bold uppercase tracking-wider">
+                <Landmark size={20} className="text-brand-500" aria-hidden="true" /> Pago por transferencia (SPEI)
+              </h2>
+
+              {pago.isDemo && (
+                <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+                  <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={20} aria-hidden="true" />
+                  <p className="text-amber-200">
+                    <strong className="font-bold">Cuenta de ejemplo.</strong> Esta tienda es una demostración: los datos
+                    bancarios de abajo son ficticios. <strong>No transfieras dinero.</strong> Puedes completar el pedido
+                    para ver el flujo completo.
+                  </p>
+                </div>
+              )}
+
+              <p className="mb-6 text-sm leading-relaxed text-gray-400">
+                {pago.instructions ||
+                  'Tu pedido se aparta al confirmarlo. Para procesarlo debes transferir el total a esta cuenta usando el concepto indicado.'}
+              </p>
+
+              <dl className="space-y-4 rounded-lg border border-gray-800 bg-carbon-900 p-5 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 pb-3">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-gray-400">Banco</dt>
+                  <dd className="font-bold text-white">{pago.bank || '—'}</dd>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 pb-3">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-gray-400">Beneficiario</dt>
+                  <dd className="text-white">{pago.beneficiary || '—'}</dd>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 pb-3">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-gray-400">CLABE interbancaria</dt>
+                  <dd className="flex items-center gap-3">
+                    <span className="break-all font-mono text-lg font-extrabold tracking-wider text-brand-500">
+                      {pago.clabe || '—'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copiarClabe}
+                      aria-label="Copiar la CLABE"
+                      className="grid h-11 w-11 place-items-center rounded-sm text-gray-400 transition-colors hover:bg-carbon-700 hover:text-brand-500"
+                    >
+                      {copiada ? (
+                        <Check size={16} className="text-emerald-500" aria-hidden="true" />
+                      ) : (
+                        <Copy size={16} aria-hidden="true" />
+                      )}
+                    </button>
+                    <span role="status" aria-live="polite" className="sr-only">
+                      {copiada ? 'CLABE copiada al portapapeles' : ''}
+                    </span>
+                  </dd>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <dt className="text-xs font-bold uppercase tracking-wider text-gray-400">Concepto a ingresar</dt>
+                  <dd className="rounded-sm bg-brand-600 px-3 py-1 font-mono text-lg font-black tracking-widest text-white">
+                    {concepto}
+                  </dd>
+                </div>
+              </dl>
+            </motion.section>
+          </div>
+
+          {/* ================================================== resumen */}
+          <aside className="lg:w-96 lg:shrink-0">
+            <div className="superficie rounded-xl p-6 lg:sticky lg:top-[calc(var(--alto-cabecera,5rem)+0.5rem)]">
+              <h2 className="mb-5 border-b border-gray-800 pb-3 text-lg font-bold uppercase tracking-widest">
+                Resumen de tu pedido
+              </h2>
+
+              <ul className="custom-scrollbar mb-5 max-h-60 space-y-3 overflow-y-auto pr-2">
+                {cartItems.map((item) => (
+                  <li key={item.id} className="flex items-start justify-between gap-3 border-b border-gray-800 pb-2">
+                    <span className="min-w-0 text-sm text-gray-300">
+                      <span className="font-bold text-brand-500">{item.quantity}x</span>{' '}
+                      <span className="text-xs uppercase">{item.name}</span>
+                    </span>
+                    <span className="whitespace-nowrap text-sm font-bold text-white">
+                      {formatPrice(getUnitPrice(item, nivel) * item.quantity)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-2 border-t border-gray-800 pt-4 text-sm text-gray-400">
+                <div className="flex justify-between">
+                  <span>Subtotal (Nivel {nivel})</span>
+                  <span className="text-white">{formatPrice(subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Envío</span>
+                  <span className="text-white">
+                    {envio === 0 ? (
+                      <span className="text-xs font-bold uppercase text-emerald-500">Gratis</span>
+                    ) : (
+                      formatPrice(envio)
+                    )}
+                  </span>
+                </div>
+                {ahorro > 0 && (
+                  <div className="flex justify-between text-emerald-500">
+                    <span>Tu ahorro</span>
+                    <span className="font-bold">−{formatPrice(ahorro)}</span>
+                  </div>
+                )}
+                <div className="mt-4 flex items-end justify-between border-t border-gray-800 pt-4">
+                  <span className="text-sm font-bold uppercase tracking-widest text-white">Total a transferir</span>
+                  <span className="text-3xl font-extrabold tracking-tight text-brand-500">{formatPrice(total)}</span>
+                </div>
+              </div>
+
+              {aviso && (
+                <p
+                  role="alert"
+                  className="mt-5 flex items-start gap-2 rounded-sm border border-red-600/50 bg-red-600/10 p-3 text-sm text-red-400"
+                >
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  {aviso}
+                </p>
+              )}
+
+              <motion.button
+                type="submit"
+                disabled={enviando}
+                whileTap={reducido ? undefined : { scale: 0.98 }}
+                className="resplandor-marca mt-6 flex min-h-[3.25rem] w-full items-center justify-center gap-2 rounded-sm bg-brand-600 px-6 text-sm font-bold uppercase tracking-widest text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-carbon-700 disabled:text-gray-300"
+              >
+                {enviando ? (
+                  <span className="latido-marca">Procesando...</span>
+                ) : (
+                  <>
+                    <CheckCircle size={18} aria-hidden="true" /> Pagar Ahora
+                  </>
+                )}
+              </motion.button>
+
+              <p className="mt-4 flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-gray-400">
+                <Lock size={10} aria-hidden="true" /> Tus datos de envío sólo se usan para entregarte el pedido
+              </p>
+            </div>
+          </aside>
+        </form>
+      </div>
+    </div>
+  );
 }

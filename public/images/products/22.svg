@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-label="Pure Creatina Vegana 500 g">
+  <defs>
+    <linearGradient id="cuerpo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3bc698"/>
+      <stop offset="55%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#0a6f4d"/>
+    </linearGradient>
+    <radialGradient id="piso" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="600" height="600" fill="#ffffff"/>
+  <ellipse cx="300" cy="548" rx="180" ry="26" fill="url(#piso)"/>
+  
+    <rect x="150" y="150" width="300" height="70" rx="22" fill="#0a7854"/>
+    <rect x="163" y="132" width="274" height="42" rx="16" fill="#0e9d6e"/>
+    <path d="M155 210 h290 v300 a44 44 0 0 1 -44 44 h-202 a44 44 0 0 1 -44 -44 z" fill="url(#cuerpo)"/>
+    <rect x="185" y="268" width="230" height="190" rx="12" fill="#ffffff" opacity="0.94"/>
+    <rect x="185" y="268" width="230" height="34" rx="12" fill="#4ccba1"/>
+    <rect x="185" y="290" width="230" height="12" fill="#4ccba1"/>
+  
+
+  <text x="300" y="306" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="2.5" fill="#096647">PURE CORE</text>
+  <text x="300" y="340" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">CREATINA VEGANA</text>
+  <text x="300" y="386" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#10b981">CREATINA</text>
+  <text x="300" y="410" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="600" letter-spacing="2" fill="#9ca3af">IMAGEN DE EJEMPLO</text>
+</svg>

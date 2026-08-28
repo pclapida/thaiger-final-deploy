@@ -1,0 +1,40 @@
+name: CI
+
+# Cada empujón y cada pull request pasan por lo mismo que se corre en local:
+# lint, pruebas y build. Si algo de eso falla, no se mezcla.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verificar:
+    name: Lint, pruebas y build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Pruebas
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Comprobar que los assets de la demo están al día
+        # El generador es determinista: si el catálogo cambió y nadie regeneró
+        # las imágenes, aquí sale a la luz.
+        run: |
+          node scripts/generate-demo-assets.mjs
+          git diff --exit-code -- public/images

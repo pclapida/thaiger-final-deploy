@@ -1,140 +1,191 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ShoppingBag, Heart, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useWishlist } from '../context/WishlistContext';
-import { useCart } from '../context/CartContext';
-import { formatPrice, getTierBasePrice, getDisplayPrice, hasDiscount, getDiscountPercent } from '../lib/pricing';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Heart, ImageOff, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
+import {
+  formatPrice,
+  getDiscountPercent,
+  getDisplayPrice,
+  getTierBasePrice,
+  hasDiscount,
+} from '../lib/pricing';
+import { fadeUp, resolveVariants, stepDelay, viewportOnce } from '../lib/motion';
+
+/** A partir de esta cantidad ya no avisamos de "últimas piezas". */
+const UMBRAL_STOCK_BAJO = 5;
 
 /**
  * Tarjeta de producto del catálogo.
- * Recibe el producto completo para que precio, oferta, stock y foto siempre
- * salgan de la misma fuente (antes cada página armaba props distintas).
+ *
+ * Recibe el producto completo para que precio, oferta, stock y foto salgan
+ * siempre de la misma fuente: cuando cada página armaba sus propias props, la
+ * tarjeta anunciaba un descuento que el carrito no cobraba.
+ *
+ * La tarjeta NO es un enlace envolvente: el HTML prohíbe meter botones dentro
+ * de un `<a>` y varios lectores de pantalla anunciaban la tarjeta como un único
+ * enlace, dejando "favoritos" y "agregar al carrito" fuera de alcance. El ancla
+ * envuelve sólo el título y se estira sobre toda la tarjeta con `after:inset-0`
+ * (enlace extendido): se sigue pudiendo pulsar la foto, y los dos botones son
+ * hermanos suyos, por encima de esa capa.
  */
-export default function ProductCard({ product, delay = 0 }) {
-  const { toggleWishlist, isInWishlist } = useWishlist();
+export default function ProductCard({ product, delay = 0, index }) {
+  const reduced = useReducedMotion();
   const { addToCart } = useCart();
-  const [imageFailed, setImageFailed] = useState(false);
+  const { toggleWishlist, isInWishlist } = useWishlist();
+  const [fotoRota, setFotoRota] = useState(false);
 
   if (!product) return null;
 
-  const { id, brand, category, name, image_url: image, stock } = product;
+  const { id, name, brand, category, image_url: foto, stock } = product;
 
-  const outOfStock = stock !== undefined && stock !== null && Number(stock) <= 0;
-  const listPrice = getTierBasePrice(product, 1);
-  const finalPrice = getDisplayPrice(product);
-  const discounted = hasDiscount(product);
-  const showImage = Boolean(image) && !imageFailed;
+  const nombre = name || 'Producto';
+  const hayStock = stock !== undefined && stock !== null;
+  const agotado = hayStock && Number(stock) <= 0;
+  const stockBajo = hayStock && Number(stock) > 0 && Number(stock) <= UMBRAL_STOCK_BAJO;
 
-  const handleQuickAdd = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (outOfStock) return;
+  const enOferta = hasDiscount(product);
+  const porcentaje = getDiscountPercent(product);
+  const precioLista = getTierBasePrice(product, 1);
+  const precioFinal = getDisplayPrice(product);
+
+  const favorito = isInWishlist(id);
+  const mostrarFoto = Boolean(foto) && !fotoRota;
+  // Nombre útil del enlace: quien navega con lector de pantalla oye la marca.
+  const etiquetaEnlace = [brand, nombre].filter(Boolean).join(', ');
+
+  // Ya no hace falta cortar el evento: los botones están fuera del ancla.
+  const agregar = () => {
+    if (agotado) return;
     addToCart(product, 1);
     toast.success('Añadido al carrito');
   };
 
-  return (
-    <Link to={`/product/${id}`} className="block h-full">
-      <motion.div
-        className="group relative bg-[#1a1a1a] p-4 rounded-xl overflow-hidden cursor-pointer h-full flex flex-col"
-        initial={{ opacity: 0, y: 50 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.5, delay: delay * 0.1 }}
-        whileHover={{
-          scale: 1.03,
-          backgroundColor: '#222222',
-          boxShadow: '0 0 25px rgba(255, 140, 0, 0.4)',
-        }}
-      >
-        {/* Borde brillante animado */}
-        <div className="absolute inset-0 border-2 border-transparent group-hover:border-orange-500 rounded-xl transition-all duration-300 z-20 pointer-events-none"></div>
+  const alternarFavorito = () => toggleWishlist(product);
 
-        {/* Badge de descuento */}
-        {discounted && (
-          <div className="absolute -top-1 -left-1 bg-red-600 text-white font-black px-3 py-1 rounded-sm border-2 border-black z-30 shadow-lg transform -rotate-12 uppercase text-[10px] tracking-tight">
-            -{getDiscountPercent(product)}% OFF
+  return (
+    <motion.article
+      className="superficie group relative flex h-full flex-col overflow-hidden rounded-xl transition-[border-color,box-shadow] duration-300 hover:border-brand-600 hover:shadow-[0_18px_45px_-18px_rgba(255,140,0,0.6)] has-[a:focus-visible]:border-brand-500"
+      variants={resolveVariants(fadeUp, reduced)}
+      initial="hidden"
+      whileInView="visible"
+      viewport={viewportOnce}
+      transition={{ delay: reduced ? 0 : stepDelay(Number(index ?? delay) || 0) }}
+      whileHover={reduced ? undefined : { y: -6 }}
+    >
+      {/* -------------------------------------------------------------- foto */}
+      <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-white">
+        {mostrarFoto ? (
+          <img
+            src={foto}
+            alt={nombre}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFotoRota(true)}
+            className="h-full w-full object-contain p-4 transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          // Marcador: una foto rota nunca deja un hueco en la rejilla.
+          // Gris 500 sobre gris 100: aquí el fondo es claro, no oscuro.
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gray-100 text-gray-500">
+            <ImageOff size={40} aria-hidden="true" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Sin foto</span>
           </div>
         )}
 
-        {/* Favoritos */}
-        <button
-          type="button"
-          aria-label="Añadir a favoritos"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleWishlist(product);
-          }}
-          className="absolute top-4 right-4 z-40 p-2 bg-black/60 backdrop-blur rounded-full hover:bg-black/90 transition-colors"
-        >
-          <Heart className={`h-5 w-5 ${isInWishlist(id) ? 'fill-red-500 text-red-500' : 'text-gray-400 hover:text-white'}`} />
-        </button>
+        {/* Los adornos no capturan el toque: debajo pasa el enlace extendido. */}
+        {enOferta && (
+          <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-sm bg-brand-600 px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white shadow-lg">
+            -{porcentaje}%
+          </span>
+        )}
 
-        {/* Imagen */}
-        <div className="w-full h-64 bg-white rounded-t-lg mb-4 flex items-center justify-center overflow-hidden relative shrink-0">
-          {showImage ? (
-            <img
-              src={image}
-              alt={name || brand}
-              loading="lazy"
-              className="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500"
-              onError={() => setImageFailed(true)}
-            />
-          ) : (
-            <ShoppingBag className="text-gray-400 h-20 w-20 opacity-50 group-hover:scale-110 transition-transform duration-500" />
-          )}
-
-          <div
-            className={`absolute bottom-0 left-0 w-full text-white text-center py-3 font-bold uppercase translate-y-full group-hover:translate-y-0 transition-transform duration-300 ${outOfStock ? 'bg-gray-600' : 'bg-orange-600'}`}
-          >
-            {outOfStock ? 'Agotado' : 'Ver Detalles'}
+        {agotado ? (
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/65">
+            <span className="rounded-full border border-white/20 bg-black/80 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-white">
+              Agotado
+            </span>
           </div>
+        ) : (
+          // Cinta que sube al pasar el cursor. En táctil no estorba.
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 translate-y-full bg-brand-600 py-2.5 text-center text-[11px] font-bold uppercase tracking-widest text-white transition-transform duration-300 group-hover:translate-y-0">
+            Ver detalles
+          </div>
+        )}
+      </div>
 
-          {outOfStock && (
-            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
-              <span className="bg-red-600 text-white font-black text-sm px-4 py-2 rounded-full uppercase tracking-widest">
-                Agotado
-              </span>
-            </div>
+      {/* Hermano del enlace, nunca dentro: si no, el botón no existe para un lector. */}
+      <button
+        type="button"
+        onClick={alternarFavorito}
+        aria-pressed={favorito}
+        aria-label={favorito ? `Quitar ${nombre} de favoritos` : `Añadir ${nombre} a favoritos`}
+        className="absolute right-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full bg-black/70 backdrop-blur transition-colors hover:bg-black"
+      >
+        <Heart
+          size={18}
+          aria-hidden="true"
+          className={favorito ? 'fill-brand-500 text-brand-500' : 'text-gray-300'}
+        />
+      </button>
+
+      {/* ------------------------------------------------------------- datos */}
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-[11px] font-black uppercase tracking-widest text-brand-500">
+            {brand || 'THAIGER'}
+          </span>
+          {category && (
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-gray-400">{category}</span>
           )}
         </div>
 
-        {/* Textos */}
-        <div className="text-center z-10 relative mt-auto flex flex-col items-center">
-          {category && (
-            <span className="text-xs text-orange-400/80 uppercase font-semibold mb-1 tracking-wider">{category}</span>
-          )}
-          <h3 className="text-orange-500 font-bold uppercase text-lg truncate w-full">{brand || 'MARCA'}</h3>
-          <p className="text-gray-300 text-sm my-1 line-clamp-2">{name || 'Detalles del producto'}</p>
+        <h3 className="recorte-2 mt-2 min-h-[2.5rem] text-sm font-semibold leading-snug text-gray-100">
+          {/*
+            Enlace extendido: la capa `after` cubre la tarjeta entera (el <article>
+            es su bloque contenedor), así que se puede pulsar la foto sin anidar
+            botones dentro del ancla. Los botones la superan con `z-20`.
+          */}
+          <Link
+            to={`/product/${id}`}
+            aria-label={etiquetaEnlace}
+            className="after:absolute after:inset-0 after:z-0 after:content-['']"
+          >
+            {nombre}
+          </Link>
+        </h3>
 
-          <div className="mt-2 flex flex-col items-center">
-            {discounted ? (
-              <>
-                <span className="text-gray-500 line-through text-xs font-bold uppercase">{formatPrice(listPrice)}</span>
-                <span className="text-white font-black text-2xl tracking-tighter">{formatPrice(finalPrice)}</span>
-              </>
-            ) : (
-              <span className="text-white font-black text-2xl tracking-tighter">{formatPrice(finalPrice)}</span>
-            )}
-          </div>
+        <p className="mt-2 min-h-[1rem] text-[11px] font-bold uppercase tracking-wider text-brand-400">
+          {stockBajo ? `Últimas ${stock} piezas` : ''}
+        </p>
+
+        <div className="mt-auto pt-3">
+          {enOferta && (
+            <p className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400 line-through">{formatPrice(precioLista)}</span>
+              <span className="rounded-sm bg-brand-600/15 px-1.5 py-0.5 text-[10px] font-black text-brand-400">
+                -{porcentaje}%
+              </span>
+            </p>
+          )}
+          <p className="truncate text-2xl font-black tracking-tight text-white">{formatPrice(precioFinal)}</p>
 
           <button
             type="button"
-            onClick={handleQuickAdd}
-            disabled={outOfStock}
-            className={`mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-sm text-xs font-bold uppercase tracking-widest transition-colors ${
-              outOfStock
-                ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                : 'bg-orange-600/10 text-orange-500 border border-orange-600/40 hover:bg-orange-600 hover:text-white'
+            onClick={agregar}
+            disabled={agotado}
+            className={`relative z-20 mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-sm text-xs font-bold uppercase tracking-widest transition-colors ${
+              agotado
+                ? 'cursor-not-allowed border border-gray-800 bg-carbon-800 text-gray-400'
+                : 'border border-brand-600/40 bg-brand-600/10 text-brand-500 hover:bg-brand-600 hover:text-white'
             }`}
           >
-            <Plus size={14} /> {outOfStock ? 'Sin stock' : 'Agregar'}
+            <Plus size={14} aria-hidden="true" /> {agotado ? 'Sin stock' : 'Agregar'}
           </button>
         </div>
-      </motion.div>
-    </Link>
+      </div>
+    </motion.article>
   );
 }

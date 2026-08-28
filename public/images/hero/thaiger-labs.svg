@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 900" width="1920" height="900" role="img" aria-label="THAIGER LABS">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#000000"/>
+      <stop offset="52%" stop-color="#331303"/>
+      <stop offset="100%" stop-color="#813007"/>
+    </linearGradient>
+    <radialGradient id="brillo" cx="0.72" cy="0.34" r="0.55">
+      <stop offset="0%" stop-color="#ea580c" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="900" fill="url(#fondo)"/>
+  <g>
+    <path d="M120 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.050"/>
+    <path d="M310 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.167"/>
+    <path d="M500 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.133"/>
+    <path d="M690 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.100"/>
+    <path d="M880 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.067"/>
+    <path d="M1070 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.183"/>
+    <path d="M1260 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.150"/>
+    <path d="M1450 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.117"/>
+    <path d="M1640 -100 l180 0 l-320 1100 l-180 0 z" fill="#ea580c" opacity="0.083"/>
+  </g>
+  <rect width="1920" height="900" fill="url(#brillo)"/>
+  <g>
+    <circle cx="10" cy="10" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="159" cy="243" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="308" cy="476" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="457" cy="709" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="606" cy="62" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="755" cy="295" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="904" cy="528" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1053" cy="761" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1202" cy="114" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1351" cy="347" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1500" cy="580" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1649" cy="813" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1798" cy="166" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="47" cy="399" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="196" cy="632" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="345" cy="865" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="494" cy="218" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="643" cy="451" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="792" cy="684" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="941" cy="37" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1090" cy="270" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1239" cy="503" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1388" cy="736" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1537" cy="89" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1686" cy="322" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1835" cy="555" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="84" cy="788" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="233" cy="141" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="382" cy="374" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="531" cy="607" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="680" cy="840" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="829" cy="193" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="978" cy="426" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1127" cy="659" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1276" cy="12" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1425" cy="245" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1574" cy="478" r="1" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1723" cy="711" r="2" fill="#ffffff" opacity="0.10"/>
+    <circle cx="1872" cy="64" r="3" fill="#ffffff" opacity="0.10"/>
+    <circle cx="121" cy="297" r="1" fill="#ffffff" opacity="0.10"/>
+  </g>
+  <path d="M1240 0 l260 0 l-420 900 l-260 0 z" fill="#ea580c" opacity="0.22"/>
+  <path d="M1500 0 l90 0 l-420 900 l-90 0 z" fill="#ea580c" opacity="0.40"/>
+  <text x="1500" y="470" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="150" font-weight="900" font-style="italic" fill="#ffffff" opacity="0.07" letter-spacing="6">THAIGER LABS</text>
+</svg>

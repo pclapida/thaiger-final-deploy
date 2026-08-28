@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-label="Volt Termogénico Burn 60 caps">
+  <defs>
+    <linearGradient id="cuerpo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#eec134"/>
+      <stop offset="55%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#8c6b05"/>
+    </linearGradient>
+    <radialGradient id="piso" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="600" height="600" fill="#ffffff"/>
+  <ellipse cx="300" cy="548" rx="180" ry="26" fill="url(#piso)"/>
+  
+    <rect x="215" y="128" width="170" height="56" rx="16" fill="#987405"/>
+    <path d="M198 180 h204 v300 a46 46 0 0 1 -46 46 h-112 a46 46 0 0 1 -46 -46 z" fill="url(#cuerpo)"/>
+    <rect x="224" y="242" width="152" height="176" rx="10" fill="#ffffff" opacity="0.94"/>
+    <rect x="224" y="242" width="152" height="30" rx="10" fill="#efc646"/>
+    <rect x="224" y="262" width="152" height="10" fill="#efc646"/>
+  
+
+  <text x="300" y="269" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="2.5" fill="#816204">VOLT SUPPS</text>
+  <text x="300" y="303" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">TERMOGÉNICO</text>
+  <text x="300" y="333" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">BURN</text>
+  <text x="300" y="379" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#eab308">QUEMADOR</text>
+  <text x="300" y="403" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="600" letter-spacing="2" fill="#9ca3af">IMAGEN DE EJEMPLO</text>
+</svg>

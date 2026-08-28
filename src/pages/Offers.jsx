@@ -1,84 +1,155 @@
-import React, { useState, useEffect } from 'react';
-import Navbar from '../components/Navbar';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { AlertTriangle, BadgePercent, Flame, Tag } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
-import { Tag } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import EmptyState from '../components/ui/EmptyState';
+import { SkeletonGrid } from '../components/ui/Skeleton';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import { products as productsApi } from '../services/api';
-import { hasDiscount, getDiscountPercent } from '../lib/pricing';
+import { getDiscountPercent, hasDiscount } from '../lib/pricing';
+import { fadeUp, resolveVariants } from '../lib/motion';
+
+/** Dato destacado de la cabecera. */
+function Dato({ icon, valor, etiqueta }) {
+  const Icono = icon;
+
+  return (
+    <div className="superficie flex items-center gap-3 rounded-xl px-5 py-4 text-left">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-600/15 text-brand-500">
+        <Icono size={20} aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xl font-black leading-none text-white">{valor}</span>
+        <span className="mt-1 block text-[11px] font-bold uppercase tracking-widest text-gray-400">
+          {etiqueta}
+        </span>
+      </span>
+    </div>
+  );
+}
 
 export default function Offers() {
-  const [offers, setOffers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  useDocumentTitle(
+    'Ofertas',
+    'Descuentos vigentes en suplementos Thaiger: proteínas, pre-entrenos y combos con precio rebajado.'
+  );
+
+  const reduced = useReducedMotion();
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
-    let active = true;
+    let vivo = true;
 
     productsApi
       .list()
-      .then((list) => {
-        if (!active) return;
-        // Sólo lo que el administrador marcó como oferta, del mayor descuento al menor.
-        setOffers(
-          list
-            .filter(hasDiscount)
-            .sort((a, b) => getDiscountPercent(b) - getDiscountPercent(a))
-        );
+      .then((lista) => {
+        if (!vivo) return;
+        setProductos(Array.isArray(lista) ? lista : []);
+        setError('');
       })
-      .catch((error) => {
-        console.error('No se pudieron cargar las ofertas:', error);
-        if (active) setOffers([]);
+      .catch(() => {
+        if (!vivo) return;
+        setProductos([]);
+        setError('No pudimos cargar las ofertas. Revisa tu conexión e inténtalo otra vez.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (vivo) setCargando(false);
       });
 
     return () => {
-      active = false;
+      vivo = false;
     };
-  }, []);
+  }, [intento]);
+
+  // Sólo lo que el panel marcó como oferta, del mayor descuento al menor.
+  const ofertas = useMemo(
+    () =>
+      productos
+        .filter(hasDiscount)
+        .sort((a, b) => getDiscountPercent(b) - getDiscountPercent(a)),
+    [productos]
+  );
+
+  const descuentoMaximo = ofertas.length > 0 ? getDiscountPercent(ofertas[0]) : 0;
+
+  const reintentar = () => {
+    setCargando(true);
+    setError('');
+    setIntento((n) => n + 1);
+  };
 
   return (
-    <div className="bg-[#0A0A0A] min-h-screen text-white">
-      <Navbar />
+    <div className="min-h-screen bg-carbon-900 text-white">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-10 sm:px-6 lg:px-8">
+        <motion.header
+          variants={resolveVariants(fadeUp, reduced)}
+          initial="hidden"
+          animate="visible"
+          className="flex flex-col items-center text-center"
+        >
+          <span className="grid h-16 w-16 place-items-center rounded-full bg-brand-600 text-white resplandor-marca">
+            <Tag size={28} aria-hidden="true" />
+          </span>
 
-      <div className="container mx-auto pt-32 px-4 pb-20">
-        <div className="flex flex-col items-center justify-center text-center mb-16">
-          <div className="bg-orange-500 p-4 rounded-full mb-6">
-            <Tag className="h-10 w-10 text-white" />
-          </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold uppercase text-orange-500 tracking-wider mb-4">
+          <h1 className="titulo-pagina mt-6 font-black uppercase tracking-tight text-white">
             Ofertas y Combos Especiales
           </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            Aprovecha nuestros descuentos de temporada y combos armados especialmente para maximizar tus
-            resultados sin gastar de más.
-          </p>
-        </div>
 
-        {loading ? (
-          <div className="text-center py-20 bg-[#111] rounded-xl border border-gray-800">
-            <h3 className="text-2xl font-bold text-orange-500 mb-2 animate-pulse">Cargando ofertas...</h3>
-          </div>
-        ) : offers.length === 0 ? (
-          <div className="text-center py-20 bg-[#111] rounded-xl border border-gray-800">
-            <h3 className="text-2xl font-bold text-gray-400 mb-2">No hay ofertas activas</h3>
-            <p className="text-gray-500 mb-6">
-              Vuelve pronto, nuestro equipo está preparando descuentos increíbles.
-            </p>
-            <Link to="/shop" className="text-orange-500 font-bold uppercase text-sm hover:text-white transition-colors">
-              Ver todo el catálogo
-            </Link>
-          </div>
-        ) : (
-          <>
-            <p className="text-gray-500 text-sm mb-6">{offers.length} productos con descuento activo.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {offers.map((offer, index) => (
-                <ProductCard key={offer.id} product={offer} delay={index % 4} />
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-400">
+            Descuentos de temporada sobre el precio del nivel que ya te toca: la rebaja se aplica
+            también cuando tu pedido sube de escalón.
+          </p>
+
+          {!cargando && !error && ofertas.length > 0 && (
+            <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-2">
+              <Dato icon={Flame} valor={`Hasta -${descuentoMaximo}%`} etiqueta="Descuento máximo" />
+              <Dato
+                icon={BadgePercent}
+                valor={`${ofertas.length} ${ofertas.length === 1 ? 'producto' : 'productos'}`}
+                etiqueta="Con descuento activo"
+              />
+            </div>
+          )}
+        </motion.header>
+
+        {/* El listado necesita su propio encabezado: sin él, el h1 de la página
+            quedaba seguido de los h3 de cada tarjeta y la jerarquía se saltaba
+            un nivel. Visualmente sobra —la cabecera ya lo dice—, así que va
+            oculto salvo para lectores de pantalla. */}
+        <section aria-labelledby="titulo-listado-ofertas" className="mt-12">
+          <h2 id="titulo-listado-ofertas" className="sr-only">
+            Productos con descuento
+          </h2>
+
+          {cargando ? (
+            <SkeletonGrid count={8} />
+          ) : error ? (
+            <EmptyState
+              icon={AlertTriangle}
+              title="No se pudieron cargar las ofertas"
+              message={error}
+              actionLabel="Reintentar"
+              onAction={reintentar}
+            />
+          ) : ofertas.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              title="No hay ofertas activas"
+              message="Vuelve pronto: las promociones se publican cada temporada. Mientras tanto, todo el catálogo sigue disponible."
+              actionLabel="Ver todo el catálogo"
+              actionTo="/shop"
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {ofertas.map((producto, indice) => (
+                <ProductCard key={producto.id} product={producto} delay={indice % 8} />
               ))}
             </div>
-          </>
-        )}
+          )}
+        </section>
       </div>
     </div>
   );

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-label="Whey Protein Isolate Vainilla 2 kg">
+  <defs>
+    <linearGradient id="cuerpo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ee7638"/>
+      <stop offset="55%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#8c3507"/>
+    </linearGradient>
+    <radialGradient id="piso" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="600" height="600" fill="#ffffff"/>
+  <ellipse cx="300" cy="548" rx="180" ry="26" fill="url(#piso)"/>
+  
+    <rect x="150" y="150" width="300" height="70" rx="22" fill="#983908"/>
+    <rect x="163" y="132" width="274" height="42" rx="16" fill="#c74b0a"/>
+    <path d="M155 210 h290 v300 a44 44 0 0 1 -44 44 h-202 a44 44 0 0 1 -44 -44 z" fill="url(#cuerpo)"/>
+    <rect x="185" y="268" width="230" height="190" rx="12" fill="#ffffff" opacity="0.94"/>
+    <rect x="185" y="268" width="230" height="34" rx="12" fill="#ef8249"/>
+    <rect x="185" y="290" width="230" height="12" fill="#ef8249"/>
+  
+
+  <text x="300" y="291" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="2.5" fill="#813007">THAIGER LABS</text>
+  <text x="300" y="325" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">WHEY ISOLATE</text>
+  <text x="300" y="355" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">VAINILLA</text>
+  <text x="300" y="401" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#ea580c">PROTEÍNA</text>
+  <text x="300" y="425" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="600" letter-spacing="2" fill="#9ca3af">IMAGEN DE EJEMPLO</text>
+</svg>

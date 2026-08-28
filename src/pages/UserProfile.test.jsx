@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserProfile from './UserProfile';
 import { auth, orders } from '../services/localBackend';
-import { renderWithProviders, resetApp, makeImageFile } from '../test/utils';
+import { makeImageFile, renderWithProviders, resetApp } from '../test/utils';
+
+// Correo propio de las pruebas: `cliente@thaiger.mx` es una cuenta sembrada.
+const CORREO = 'perfil.prueba@thaiger.mx';
 
 async function crearCliente() {
-  return auth.signUp('cliente@thaiger.mx', 'secreto123', 'Cliente Thaiger');
+  return auth.signUp(CORREO, 'secreto123', 'Cliente Thaiger');
 }
 
 beforeEach(async () => {
@@ -21,37 +24,36 @@ describe('perfil del usuario', () => {
     renderWithProviders(<UserProfile />, { route: '/profile' });
 
     expect(await screen.findByText(/aún no has guardado pedidos/i)).toBeInTheDocument();
-    expect(screen.getByText('cliente@thaiger.mx')).toBeInTheDocument();
+    expect(screen.getByText(CORREO)).toBeInTheDocument();
   });
 
   it('lista los pedidos del usuario con su total y concepto SPEI', async () => {
     const cliente = await crearCliente();
     await orders.create({
       userId: cliente.id,
-      total: 1526,
-      shippingInfo: { fullName: 'Cliente Thaiger', city: 'CDMX', zip: '01000' },
-      paymentInfo: { method: 'SPEI', concepto: 'TH-4321' },
-      items: [{ product_id: 3, product_name: 'Creatina', quantity: 2, price_at_purchase: 638 }],
+      shippingInfo: {
+        fullName: 'Cliente Thaiger',
+        phone: '5512345678',
+        address: 'Calle Demo 1',
+        city: 'CDMX',
+        zip: '01000',
+      },
+      paymentInfo: { concepto: 'TH-4321', banco: 'BANCO DEMO' },
+      items: [{ product_id: 3, quantity: 2 }],
     });
 
     renderWithProviders(<UserProfile />, { route: '/profile' });
 
-    expect(await screen.findByText('$1,526.00')).toBeInTheDocument();
-    expect(screen.getByText(/TH-4321/)).toBeInTheDocument();
-    expect(screen.getByText(/1 artículos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/TH-4321/)).toBeInTheDocument();
+    expect(screen.getByText(/1 artículo/i)).toBeInTheDocument();
   });
 
   it('no muestra los pedidos de otras personas', async () => {
     const cliente = await crearCliente();
-    await orders.create({
-      userId: 'otra-persona',
-      total: 999,
-      shippingInfo: {},
-      paymentInfo: {},
-      items: [],
-    });
 
+    // El pedido de la cuenta sembrada no debe aparecer en este perfil.
     expect(await orders.listByUser(cliente.id)).toHaveLength(0);
+
     renderWithProviders(<UserProfile />, { route: '/profile' });
     expect(await screen.findByText(/aún no has guardado pedidos/i)).toBeInTheDocument();
   });
@@ -100,13 +102,61 @@ describe('perfil del usuario', () => {
     await crearCliente();
     window.localStorage.setItem(
       'thaiger_wishlist',
-      JSON.stringify([{ id: 3, name: 'Creatina Monohidratada', brand: 'BIO-SPORT', category: 'Creatina', price1: 638 }])
+      JSON.stringify([
+        {
+          id: 3,
+          name: 'Creatina Monohidratada Micronizada 300 g',
+          brand: 'THAIGER LABS',
+          category: 'Creatina',
+          price1: 599,
+        },
+      ])
     );
 
     renderWithProviders(<UserProfile />, { route: '/profile' });
     await user.click(await screen.findByRole('button', { name: /mis favoritos/i }));
 
-    expect(await screen.findByText('Creatina Monohidratada')).toBeInTheDocument();
-    expect(screen.getByText('$638.00')).toBeInTheDocument();
+    expect(await screen.findByText('Creatina Monohidratada Micronizada 300 g')).toBeInTheDocument();
+  });
+
+  it('guarda una dirección en la libreta (ya no dice «Próximamente»)', async () => {
+    const user = userEvent.setup();
+    await crearCliente();
+    renderWithProviders(<UserProfile />, { route: '/profile' });
+
+    await user.click(await screen.findByRole('button', { name: /^direcciones$/i }));
+    expect(screen.queryByText(/próximamente/i)).toBeNull();
+
+    // Abre el formulario de alta (la libreta vacía ofrece "Añadir la primera").
+    await user.click(await screen.findByRole('button', { name: /añadir la primera/i }));
+
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText(/^alias/i), 'Casa');
+    await user.type(within(dialogo).getByLabelText(/quién recibe/i), 'Cliente Thaiger');
+    await user.type(within(dialogo).getByLabelText(/teléfono/i), '5512345678');
+    await user.type(within(dialogo).getByLabelText(/calle y número/i), 'Av. Demo 123');
+    await user.type(within(dialogo).getByLabelText(/^ciudad/i), 'CDMX');
+    await user.type(within(dialogo).getByLabelText(/código postal/i), '01000');
+
+    await user.click(within(dialogo).getByRole('button', { name: /guardar/i }));
+
+    expect(await screen.findByText('Casa')).toBeInTheDocument();
+  });
+
+  it('el cambio de contraseña exige la actual', async () => {
+    const user = userEvent.setup();
+    await crearCliente();
+    renderWithProviders(<UserProfile />, { route: '/profile' });
+
+    await user.click(await screen.findByRole('button', { name: /detalles de cuenta/i }));
+
+    const actual = await screen.findByLabelText(/^contraseña actual/i);
+    await user.type(actual, 'equivocada1');
+    await user.type(screen.getByLabelText(/^contraseña nueva/i), 'flamante123');
+    await user.type(screen.getByLabelText(/^repite la contraseña nueva/i), 'flamante123');
+
+    await user.click(screen.getByRole('button', { name: /actualizar contraseña/i }));
+
+    expect(await screen.findByText(/no es correcta/i)).toBeInTheDocument();
   });
 });

@@ -1,15 +1,20 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
+/**
+ * Rutas que exigen sesión iniciada (carrito pagado, perfil...).
+ *
+ * Guarda en el estado de navegación la ruta a la que se quería entrar para que
+ * el login devuelva a la persona ahí y no la deje tirada en la portada.
+ */
+export default function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return children;
-};
+  const location = useLocation();
 
-export default ProtectedRoute;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+}

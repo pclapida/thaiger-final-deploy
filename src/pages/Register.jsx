@@ -1,143 +1,259 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { UserPlus, ArrowLeft, Mail, Lock, User } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import React, { useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ArrowLeft, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+import { Field, TextField, inputClasses } from '../components/ui/Field';
+import { isValidEmail, passwordStrength, sanitizeText, validatePassword } from '../lib/security';
+import { fadeUp, resolveVariants, scaleIn } from '../lib/motion';
+import useDocumentTitle from '../hooks/useDocumentTitle';
+
+/** Cuántos tramos pinta la barra de fuerza (passwordStrength va de 0 a 5). */
+const TRAMOS = 5;
+
+function traducirError(mensaje) {
+  const texto = String(mensaje ?? '').trim();
+  if (/already registered|already in use|ya existe/i.test(texto)) return 'El correo electrónico ya está registrado.';
+  return texto || 'No pudimos crear la cuenta. Vuelve a intentarlo.';
+}
 
 export default function Register() {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+  useDocumentTitle('Crear cuenta', 'Crea tu cuenta Thaiger para comprar suplementos originales con precios de mayoreo.');
 
-    const navigate = useNavigate();
-    const { register } = useAuth();
+  const [nombre, setNombre] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmacion, setConfirmacion] = useState('');
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [verContrasena, setVerContrasena] = useState(false);
+  const [errores, setErrores] = useState({});
+  const [errorGeneral, setErrorGeneral] = useState('');
+  const [cargando, setCargando] = useState(false);
 
-    const handleRegister = async (e) => {
-        e.preventDefault();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { register } = useAuth();
+  const reduced = useReducedMotion();
 
-        if (password !== confirmPassword) {
-            return toast.error('Las contraseñas no coinciden.');
-        }
+  const destino = location.state?.from?.pathname || '/';
+  const fuerza = useMemo(() => passwordStrength(password), [password]);
 
-        try {
-            setIsLoading(true);
-            await register(email, password, name);
+  /** Revisa el formulario completo: así ningún error queda escondido tras otro. */
+  const revisar = () => {
+    const fallos = {};
 
-            toast.success('¡Cuenta creada con éxito!');
-            navigate('/'); // Redirigimos al home tras el registro
-        } catch (error) {
-            if (error.message.includes('already registered') || error.message.includes('already in use')) {
-                toast.error('El correo electrónico ya está registrado.');
-            } else if (error.message.includes('Password should be') || error.message.includes('weak')) {
-                toast.error('La contraseña debe tener al menos 6 caracteres.');
-            } else {
-                toast.error('Error al crear la cuenta.');
-                console.error(error);
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    if (!sanitizeText(nombre, { maxLength: 60 })) fallos.nombre = 'Escribe tu nombre.';
+    if (!isValidEmail(email)) fallos.email = 'El correo electrónico no es válido.';
 
-    return (
-        <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden p-4">
-            {/* Fondo Ambientado */}
-            <div className="absolute inset-0 bg-[url('/banner.jpg')] bg-cover bg-center opacity-20 filter blur-sm"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent"></div>
+    const problemaContrasena = validatePassword(password);
+    if (problemaContrasena) fallos.password = problemaContrasena;
 
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="relative z-10 w-full max-w-md bg-[#111] border border-gray-800 p-8 rounded-sm shadow-[0_0_50px_rgba(234,88,12,0.1)]"
+    if (password !== confirmacion) fallos.confirmacion = 'Las contraseñas no coinciden.';
+    if (!aceptaTerminos) fallos.terminos = 'Debes aceptar los términos y condiciones.';
+
+    return fallos;
+  };
+
+  const manejarEnvio = async (evento) => {
+    evento.preventDefault();
+    if (cargando) return;
+
+    setErrorGeneral('');
+    const fallos = revisar();
+    setErrores(fallos);
+    if (Object.keys(fallos).length > 0) return;
+
+    setCargando(true);
+    try {
+      await register(email, password, sanitizeText(nombre, { maxLength: 60 }));
+      toast.success('¡Cuenta creada con éxito!');
+      navigate(destino, { replace: true });
+    } catch (fallo) {
+      setErrorGeneral(traducirError(fallo?.message));
+      setCargando(false);
+    }
+  };
+
+  return (
+    <div className="relative flex min-h-[calc(100dvh-5rem)] items-center justify-center overflow-hidden bg-carbon-950 px-4 py-12">
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[url('/images/hero/thaiger-labs.svg')] bg-cover bg-center opacity-20 blur-md"
+      />
+      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-carbon-950 via-carbon-950/85 to-carbon-950" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-600/20 blur-3xl"
+      />
+
+      <motion.div
+        variants={resolveVariants(scaleIn, reduced)}
+        initial="hidden"
+        animate="visible"
+        className="superficie relative z-10 w-full max-w-lg rounded-2xl p-6 shadow-2xl shadow-black sm:p-10"
+      >
+        <motion.div variants={resolveVariants(fadeUp, reduced)} className="text-center">
+          <img src="/logo.png" alt="Thaiger Supplements" className="mx-auto mb-6 h-12 w-auto object-contain" />
+          <h1 className="text-2xl font-black uppercase italic tracking-tight text-white sm:text-3xl">
+            Únete a <span className="text-brand-500">Thaiger</span>
+          </h1>
+          <p className="mt-2 text-sm text-gray-400">Crea tu cuenta y empieza tu transformación.</p>
+        </motion.div>
+
+        <form onSubmit={manejarEnvio} className="mt-8 space-y-5" noValidate>
+          <TextField
+            label="Nombre completo"
+            required
+            error={errores.nombre}
+            value={nombre}
+            onChange={(evento) => setNombre(evento.target.value)}
+            placeholder="Tu Nombre"
+            autoComplete="name"
+            maxLength={60}
+          />
+
+          <TextField
+            label="Correo electrónico"
+            type="email"
+            required
+            error={errores.email}
+            value={email}
+            onChange={(evento) => setEmail(evento.target.value)}
+            placeholder="usuario@ejemplo.com"
+            autoComplete="email"
+          />
+
+          <div className="space-y-3">
+            <Field
+              label="Contraseña"
+              required
+              error={errores.password}
+              hint="Mínimo 8 caracteres, combinando letras y números."
             >
-                <div className="text-center mb-8">
-                    <h2 className="text-3xl font-black italic text-white uppercase tracking-tighter mb-2">
-                        Únete a <span className="text-orange-600">Thaiger</span>
-                    </h2>
-                    <p className="text-gray-400 text-sm">Crea tu cuenta y empieza tu transformación.</p>
+              {({ id, describedBy, invalid }) => (
+                <div className="relative">
+                  <input
+                    id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={invalid || undefined}
+                    type={verContrasena ? 'text' : 'password'}
+                    value={password}
+                    onChange={(evento) => setPassword(evento.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    required
+                    className={inputClasses({ invalid, extra: 'pr-14' })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setVerContrasena((previo) => !previo)}
+                    aria-label={verContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-gray-500 transition-colors hover:text-brand-500"
+                  >
+                    {verContrasena ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                  </button>
                 </div>
+              )}
+            </Field>
 
-                <form className="space-y-5" onSubmit={handleRegister}>
-                    {/* Nombre Completo */}
-                    <div className="space-y-1">
-                        <label className="text-xs uppercase font-bold text-gray-500 ml-1">Nombre Completo</label>
-                        <div className="relative">
-                            <User className="absolute left-4 top-3.5 text-gray-600 h-5 w-5" />
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Tu Nombre"
-                                className="w-full bg-[#0A0A0A] border border-gray-800 text-white px-12 py-3 rounded-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all placeholder:text-gray-700"
-                                required
-                            />
-                        </div>
-                    </div>
+            {/* Medidor de fuerza: el color acompaña, pero el texto es quien informa. */}
+            <div>
+              <div aria-hidden="true" className="flex gap-1.5">
+                {Array.from({ length: TRAMOS }, (_, indice) => (
+                  <span
+                    key={indice}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      indice < fuerza.score ? 'bg-brand-500' : 'bg-carbon-600'
+                    }`}
+                  />
+                ))}
+              </div>
+              <p aria-live="polite" className="mt-2 text-[11px] uppercase tracking-widest text-gray-500">
+                Fuerza: <span className="font-bold text-gray-300">{fuerza.label}</span>
+              </p>
+            </div>
+          </div>
 
-                    {/* Email */}
-                    <div className="space-y-1">
-                        <label className="text-xs uppercase font-bold text-gray-500 ml-1">Correo Electrónico</label>
-                        <div className="relative">
-                            <Mail className="absolute left-4 top-3.5 text-gray-600 h-5 w-5" />
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="usuario@ejemplo.com"
-                                className="w-full bg-[#0A0A0A] border border-gray-800 text-white px-12 py-3 rounded-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all placeholder:text-gray-700"
-                                required
-                            />
-                        </div>
-                    </div>
+          <Field label="Confirmar contraseña" required error={errores.confirmacion}>
+            {({ id, describedBy, invalid }) => (
+              <input
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid || undefined}
+                type={verContrasena ? 'text' : 'password'}
+                value={confirmacion}
+                onChange={(evento) => setConfirmacion(evento.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                required
+                className={inputClasses({ invalid })}
+              />
+            )}
+          </Field>
 
-                    {/* Contraseña */}
-                    <div className="space-y-1">
-                        <label className="text-xs uppercase font-bold text-gray-500 ml-1">Contraseña</label>
-                        <div className="relative">
-                            <Lock className="absolute left-4 top-3.5 text-gray-600 h-5 w-5" />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                className="w-full bg-[#0A0A0A] border border-gray-800 text-white px-12 py-3 rounded-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all placeholder:text-gray-700"
-                                required
-                            />
-                        </div>
-                    </div>
+          <div>
+            <label htmlFor="registro-terminos" className="flex cursor-pointer items-start gap-3 py-2 text-sm text-gray-400">
+              <input
+                id="registro-terminos"
+                type="checkbox"
+                checked={aceptaTerminos}
+                onChange={(evento) => setAceptaTerminos(evento.target.checked)}
+                aria-describedby={errores.terminos ? 'registro-terminos-error' : undefined}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600"
+              />
+              <span>
+                Acepto los{' '}
+                <Link to="/terms" className="font-bold text-brand-500 underline underline-offset-2 hover:text-white">
+                  términos y condiciones
+                </Link>{' '}
+                de Thaiger Supplements.
+              </span>
+            </label>
+            {errores.terminos && (
+              <p id="registro-terminos-error" role="alert" className="text-[11px] font-bold text-red-500">
+                {errores.terminos}
+              </p>
+            )}
+          </div>
 
-                    {/* Confirmar Contraseña */}
-                    <div className="space-y-1">
-                        <label className="text-xs uppercase font-bold text-gray-500 ml-1">Confirmar Contraseña</label>
-                        <div className="relative">
-                            <Lock className="absolute left-4 top-3.5 text-gray-600 h-5 w-5" />
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                placeholder="••••••••"
-                                className="w-full bg-[#0A0A0A] border border-gray-800 text-white px-12 py-3 rounded-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all placeholder:text-gray-700"
-                                required
-                            />
-                        </div>
-                    </div>
+          <div aria-live="polite">
+            {errorGeneral && (
+              <p
+                role="alert"
+                className="rounded-sm border border-red-800 bg-red-950/40 px-4 py-3 text-sm font-bold text-red-400"
+              >
+                {errorGeneral}
+              </p>
+            )}
+          </div>
 
-                    <button type="submit" disabled={isLoading} className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-black uppercase italic tracking-wider py-4 rounded-sm transition-all transform hover:-translate-y-1 hover:shadow-lg flex items-center justify-center gap-2 mt-4">
-                        <UserPlus size={20} /> {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
-                    </button>
-                </form>
+          <button
+            type="submit"
+            disabled={cargando}
+            aria-busy={cargando}
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-sm bg-brand-600 px-6 py-4 text-sm font-black uppercase italic tracking-widest text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {cargando ? (
+              <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <UserPlus size={18} aria-hidden="true" />
+            )}
+            Crear Cuenta
+          </button>
+        </form>
 
-                <div className="mt-8 pt-6 border-t border-gray-800 text-center">
-                    <p className="text-gray-500 text-sm mb-4">¿Ya tienes cuenta?</p>
-                    <Link to="/login" className="text-orange-500 font-bold uppercase text-sm hover:text-white transition-colors flex items-center justify-center gap-2">
-                        <ArrowLeft size={16} /> Volver al Login
-                    </Link>
-                </div>
-            </motion.div>
+        <div className="mt-8 border-t border-gray-800 pt-6 text-center">
+          <p className="text-sm text-gray-500">¿Ya tienes cuenta?</p>
+          <Link
+            to="/login"
+            state={location.state}
+            className="mt-2 inline-flex min-h-[44px] items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest text-brand-500 transition-colors hover:text-white"
+          >
+            <ArrowLeft size={16} aria-hidden="true" /> Volver al acceso
+          </Link>
         </div>
-    );
+      </motion.div>
+    </div>
+  );
 }

@@ -4,8 +4,9 @@
  */
 
 const DB_NAME = 'thaiger_local_db';
-const DB_VERSION = 1;
-export const STORES = ['products', 'users', 'orders', 'order_items', 'meta'];
+// v2 añade el almacén `settings` (configuración editable desde el panel).
+const DB_VERSION = 2;
+export const STORES = ['products', 'users', 'orders', 'order_items', 'settings', 'meta'];
 
 let dbPromise = null;
 
@@ -89,4 +90,28 @@ export const idb = {
 /** Sólo para pruebas: descarta la conexión cacheada. */
 export function _resetConnection() {
   dbPromise = null;
+}
+
+/**
+ * Borra la base local por completo (opción "restablecer datos" del panel).
+ * Cierra la conexión abierta primero: si no, el navegador deja la petición
+ * bloqueada hasta que se cierren todas las pestañas.
+ */
+export async function deleteDatabase() {
+  if (dbPromise) {
+    try {
+      (await dbPromise).close();
+    } catch {
+      /* la conexión ya estaba cerrada */
+    }
+    dbPromise = null;
+  }
+
+  await new Promise((resolve, reject) => {
+    const request = getIndexedDB().deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    // Otra pestaña con la base abierta impide borrarla; no bloqueamos al usuario.
+    request.onblocked = () => resolve();
+  });
 }

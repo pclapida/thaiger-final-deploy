@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300" width="600" height="300" role="img" aria-label="ATLAS FOODS">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e35151"/>
+      <stop offset="100%" stop-color="#8f1919"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="300" fill="url(#g)"/>
+  <path d="M0 300 l180 -300 l90 0 l-180 300 z" fill="#ffffff" opacity="0.10"/>
+  <path d="M420 300 l180 -300 l60 0 l-180 300 z" fill="#000000" opacity="0.12"/>
+  <text x="300" y="140" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="54" font-weight="900" font-style="italic" fill="#ffffff" letter-spacing="2">ATLAS FOODS</text>
+  <line x1="180" y1="168" x2="420" y2="168" stroke="#ffffff" stroke-width="4" opacity="0.7"/>
+  <text x="300" y="212" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="7" fill="#ffffff" opacity="0.8">MARCA DE EJEMPLO</text>
+</svg>

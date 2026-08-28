@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-label="Iron Beta Alanina 250 g">
+  <defs>
+    <linearGradient id="cuerpo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#39b5ed"/>
+      <stop offset="55%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#08638c"/>
+    </linearGradient>
+    <radialGradient id="piso" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="600" height="600" fill="#ffffff"/>
+  <ellipse cx="300" cy="548" rx="180" ry="26" fill="url(#piso)"/>
+  
+    <rect x="262" y="92" width="76" height="60" rx="14" fill="#096b97"/>
+    <path d="M258 150 h84 l34 76 v276 a44 44 0 0 1 -44 44 h-64 a44 44 0 0 1 -44 -44 v-276 z" fill="url(#cuerpo)"/>
+    <rect x="238" y="268" width="124" height="182" rx="10" fill="#ffffff" opacity="0.94"/>
+    <rect x="238" y="268" width="124" height="28" rx="10" fill="#4abcef"/>
+    <rect x="238" y="286" width="124" height="10" fill="#4abcef"/>
+  
+
+  <text x="300" y="291" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="2.5" fill="#085b80">IRON PEAK</text>
+  <text x="300" y="325" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">BETA</text>
+  <text x="300" y="355" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="900" fill="#111111">ALANINA</text>
+  <text x="300" y="401" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#0ea5e9">AMINOS</text>
+  <text x="300" y="425" text-anchor="middle" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12" font-weight="600" letter-spacing="2" fill="#9ca3af">IMAGEN DE EJEMPLO</text>
+</svg>

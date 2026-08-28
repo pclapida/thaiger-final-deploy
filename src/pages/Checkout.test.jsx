@@ -7,12 +7,13 @@ import Checkout from './Checkout';
 import ThaigerLogin from '../components/ThaigerLogin';
 import Register from './Register';
 import { auth, orders, products, DEMO_ADMIN } from '../services/localBackend';
-import { renderWithProviders, resetApp } from '../test/utils';
+import { getUnitPrice, SHIPPING_COST } from '../lib/pricing';
+import { ponerEnCarrito, renderWithProviders, resetApp } from '../test/utils';
 
-async function ponerEnCarrito(cantidad = 1) {
-  const producto = await products.get(3); // BIOSPORT Creatine Monohydrate 1K
-  window.localStorage.setItem('thaiger_cart', JSON.stringify([{ ...producto, quantity: cantidad }]));
-  return producto;
+/** Un producto con inventario de sobra, para que la compra no choque con el stock. */
+async function productoDePrueba() {
+  const lista = await products.list();
+  return lista.find((p) => p.stock >= 5);
 }
 
 async function llenarEnvio(user) {
@@ -47,7 +48,7 @@ describe('acceso a la cuenta', () => {
     renderWithProviders(<ThaigerLogin />, { route: '/login' });
 
     await user.type(await screen.findByPlaceholderText(/usuario@ejemplo/i), DEMO_ADMIN.email);
-    await user.type(screen.getByPlaceholderText('••••••••'), 'incorrecta');
+    await user.type(screen.getByPlaceholderText('••••••••'), 'incorrecta1');
     await user.click(screen.getByRole('button', { name: /^ingresar$/i }));
 
     expect(await screen.findByText(/correo o contraseña incorrectos/i)).toBeInTheDocument();
@@ -59,16 +60,21 @@ describe('acceso a la cuenta', () => {
     renderWithProviders(<Register />, { route: '/register' });
 
     await user.type(await screen.findByPlaceholderText(/tu nombre/i), 'Cliente Nuevo');
-    await user.type(screen.getByPlaceholderText(/usuario@ejemplo/i), 'cliente@thaiger.mx');
+    await user.type(screen.getByPlaceholderText(/usuario@ejemplo/i), 'registro@thaiger.mx');
 
     const [password, confirmar] = screen.getAllByPlaceholderText('••••••••');
     await user.type(password, 'secreto123');
     await user.type(confirmar, 'secreto123');
+
+    // La casilla de términos es obligatoria.
+    const terminos = screen.queryByRole('checkbox');
+    if (terminos) await user.click(terminos);
+
     await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     await waitFor(async () => {
       const sesion = await auth.getSession();
-      expect(sesion?.email).toBe('cliente@thaiger.mx');
+      expect(sesion?.email).toBe('registro@thaiger.mx');
       expect(sesion.role).toBe('user');
     });
   });
@@ -83,9 +89,33 @@ describe('acceso a la cuenta', () => {
     const [password, confirmar] = screen.getAllByPlaceholderText('••••••••');
     await user.type(password, 'secreto123');
     await user.type(confirmar, 'otracosa123');
+
+    const terminos = screen.queryByRole('checkbox');
+    if (terminos) await user.click(terminos);
+
     await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     expect(await screen.findByText(/las contraseñas no coinciden/i)).toBeInTheDocument();
+    expect(await auth.getSession()).toBeNull();
+  });
+
+  it('exige una contraseña con letras y números', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Register />, { route: '/register' });
+
+    await user.type(await screen.findByPlaceholderText(/tu nombre/i), 'Cliente');
+    await user.type(screen.getByPlaceholderText(/usuario@ejemplo/i), 'debil@thaiger.mx');
+
+    const [password, confirmar] = screen.getAllByPlaceholderText('••••••••');
+    await user.type(password, 'solopalabras');
+    await user.type(confirmar, 'solopalabras');
+
+    const terminos = screen.queryByRole('checkbox');
+    if (terminos) await user.click(terminos);
+
+    await user.click(screen.getByRole('button', { name: /crear cuenta/i }));
+
+    expect(await screen.findByText(/letras y números/i)).toBeInTheDocument();
     expect(await auth.getSession()).toBeNull();
   });
 });
@@ -94,7 +124,8 @@ describe('checkout', () => {
   it('registra el pedido, descuenta inventario y vacía el carrito', async () => {
     const user = userEvent.setup();
     const cliente = await auth.signUp('comprador@thaiger.mx', 'secreto123', 'Comprador');
-    const producto = await ponerEnCarrito(2);
+    const producto = await productoDePrueba();
+    ponerEnCarrito(producto, 2);
 
     renderWithProviders(<Checkout />, { route: '/checkout' });
     await screen.findByRole('heading', { name: /finalizar compra/i });
@@ -110,18 +141,43 @@ describe('checkout', () => {
     expect(pedido.order_items).toHaveLength(1);
     expect(pedido.order_items[0]).toMatchObject({ product_id: producto.id, quantity: 2 });
 
-    // Nivel 1 (menos de $10,000 de lista) más $250 de envío por no llegar a $5,000.
-    expect(pedido.total).toBeCloseTo(producto.price1 * 2 + 250, 2);
+    // El total lo calcula la lógica de negocio, no la prueba: nivel 1 (menos de
+    // $10,000 de lista) más el envío por no llegar al mínimo.
+    expect(pedido.total).toBeCloseTo(getUnitPrice(producto, 1) * 2 + SHIPPING_COST, 2);
 
     // El inventario bajó y el carrito quedó limpio.
     expect((await products.get(producto.id)).stock).toBe(producto.stock - 2);
     expect(JSON.parse(window.localStorage.getItem('thaiger_cart'))).toEqual([]);
   });
 
+  it('el precio no se acepta desde el navegador', async () => {
+    const user = userEvent.setup();
+    const cliente = await auth.signUp('listillo@thaiger.mx', 'secreto123', 'Listillo');
+    const producto = await productoDePrueba();
+
+    // Carrito manipulado a mano: precios a un peso.
+    window.localStorage.setItem(
+      'thaiger_cart',
+      JSON.stringify([{ ...producto, price1: 1, price2: 1, price3: 1, quantity: 1 }])
+    );
+
+    renderWithProviders(<Checkout />, { route: '/checkout' });
+    await screen.findByRole('heading', { name: /finalizar compra/i });
+    await llenarEnvio(user);
+    await user.click(screen.getByRole('button', { name: /pagar ahora/i }));
+
+    await waitFor(async () => expect(await orders.listByUser(cliente.id)).toHaveLength(1));
+
+    const [pedido] = await orders.listByUser(cliente.id);
+    // El backend recalculó contra el catálogo.
+    expect(pedido.order_items[0].price_at_purchase).toBeCloseTo(getUnitPrice(producto, 1), 2);
+    expect(pedido.total).toBeGreaterThan(1);
+  });
+
   it('exige la dirección completa antes de cobrar', async () => {
     const user = userEvent.setup();
     const cliente = await auth.signUp('incompleto@thaiger.mx', 'secreto123');
-    await ponerEnCarrito(1);
+    ponerEnCarrito(await productoDePrueba(), 1);
 
     renderWithProviders(<Checkout />, { route: '/checkout' });
     await screen.findByRole('heading', { name: /finalizar compra/i });
@@ -138,5 +194,20 @@ describe('checkout', () => {
     renderWithProviders(<Checkout />, { route: '/checkout' });
 
     expect(await screen.findByText(/el carrito está vacío/i)).toBeInTheDocument();
+  });
+
+  it('muestra los datos bancarios de la configuración, no escritos a mano', async () => {
+    await auth.signUp('banco@thaiger.mx', 'secreto123');
+    ponerEnCarrito(await productoDePrueba(), 1);
+
+    renderWithProviders(<Checkout />, { route: '/checkout' });
+    await screen.findByRole('heading', { name: /finalizar compra/i });
+
+    // Los valores por defecto de src/data/settings.js.
+    expect(await screen.findByText(/BANCO DEMO/i)).toBeInTheDocument();
+    expect(screen.getByText(/000000000000000000/)).toBeInTheDocument();
+    // Y el aviso de que la cuenta es de ejemplo (el texto vive en un <strong>
+    // dentro de un <p>, así que hay más de una coincidencia).
+    expect(screen.getAllByText(/cuenta de ejemplo/i).length).toBeGreaterThan(0);
   });
 });

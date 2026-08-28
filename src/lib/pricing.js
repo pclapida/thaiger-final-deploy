@@ -4,13 +4,58 @@
  * Reglas:
  *  - Precios escalonados por monto del carrito: Nivel 1 (price1), Nivel 2 (price2), Nivel 3 (price3).
  *  - Un producto "en oferta" aplica su porcentaje de descuento sobre el precio del nivel vigente.
- *  - Envío gratis a partir de FREE_SHIPPING_THRESHOLD.
+ *  - Envío gratis a partir del umbral configurado.
+ *
+ * Los umbrales son configurables desde el panel de administración: al arrancar,
+ * `services/api` llama a `configurePricing()` con lo guardado en los ajustes.
+ * Aquí sólo vive la aritmética, para poder probarla sin montar React.
  */
 
-export const TIER_2_THRESHOLD = 10000;
-export const TIER_3_THRESHOLD = 20000;
-export const FREE_SHIPPING_THRESHOLD = 5000;
-export const SHIPPING_COST = 250;
+/** Valores con los que arranca una instalación limpia. */
+export const DEFAULT_PRICING = {
+  tier2From: 10000,
+  tier3From: 20000,
+  freeShippingFrom: 5000,
+  shippingCost: 250,
+};
+
+// Compatibilidad: siguen exportándose como constantes de referencia.
+export const TIER_2_THRESHOLD = DEFAULT_PRICING.tier2From;
+export const TIER_3_THRESHOLD = DEFAULT_PRICING.tier3From;
+export const FREE_SHIPPING_THRESHOLD = DEFAULT_PRICING.freeShippingFrom;
+export const SHIPPING_COST = DEFAULT_PRICING.shippingCost;
+
+let config = { ...DEFAULT_PRICING };
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+/** Aplica los umbrales guardados en los ajustes de la tienda. */
+export function configurePricing(patch = {}) {
+  config = {
+    tier2From: positiveNumber(patch.tier2From, config.tier2From),
+    tier3From: positiveNumber(patch.tier3From, config.tier3From),
+    freeShippingFrom: positiveNumber(patch.freeShippingFrom, config.freeShippingFrom),
+    shippingCost: positiveNumber(patch.shippingCost, config.shippingCost),
+  };
+
+  // El nivel 3 nunca puede pedir menos dinero que el nivel 2.
+  if (config.tier3From < config.tier2From) config.tier3From = config.tier2From;
+
+  return getPricingConfig();
+}
+
+export function getPricingConfig() {
+  return { ...config };
+}
+
+/** Sólo para pruebas y para el botón de "restaurar" del panel. */
+export function resetPricingConfig() {
+  config = { ...DEFAULT_PRICING };
+  return getPricingConfig();
+}
 
 export function formatPrice(value) {
   const number = Number(value);
@@ -58,16 +103,27 @@ export function getDisplayPrice(product) {
 
 /** Nivel de precios que corresponde a un subtotal de lista. */
 export function getTier(listTotal) {
-  if (listTotal >= TIER_3_THRESHOLD) return 3;
-  if (listTotal >= TIER_2_THRESHOLD) return 2;
+  if (listTotal >= config.tier3From) return 3;
+  if (listTotal >= config.tier2From) return 2;
   return 1;
 }
 
 /** Monto que falta para desbloquear el siguiente nivel (0 si ya está en el máximo). */
 export function amountToNextTier(listTotal) {
-  if (listTotal >= TIER_3_THRESHOLD) return 0;
-  const target = listTotal >= TIER_2_THRESHOLD ? TIER_3_THRESHOLD : TIER_2_THRESHOLD;
+  if (listTotal >= config.tier3From) return 0;
+  const target = listTotal >= config.tier2From ? config.tier3From : config.tier2From;
   return Math.max(0, target - listTotal);
+}
+
+/** Costo de envío para un subtotal dado. */
+export function getShippingCost(subtotal) {
+  if (subtotal === 0) return 0;
+  return subtotal >= config.freeShippingFrom ? 0 : config.shippingCost;
+}
+
+/** Cuánto falta para el envío gratis (0 si ya lo alcanzó). */
+export function amountToFreeShipping(subtotal) {
+  return Math.max(0, config.freeShippingFrom - subtotal);
 }
 
 /**
@@ -86,14 +142,24 @@ export function computeCartTotals(items = []) {
     0
   );
 
-  const shipping = subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+  const shipping = getShippingCost(subtotal);
+
+  // Lo que el cliente se ahorra frente al precio público sin oferta.
+  const savings = items.reduce((acc, item) => {
+    const publicPrice = getTierBasePrice(item, 1);
+    const paid = getUnitPrice(item, tier);
+    return acc + Math.max(0, publicPrice - paid) * (Number(item.quantity) || 0);
+  }, 0);
 
   return {
     listTotal,
     tier,
     subtotal,
     shipping,
+    savings,
     total: subtotal + shipping,
     missingForNextTier: amountToNextTier(listTotal),
+    missingForFreeShipping: amountToFreeShipping(subtotal),
+    itemCount: items.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0),
   };
 }
