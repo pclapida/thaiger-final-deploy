@@ -10,6 +10,15 @@ para enseñar y probar la tienda de punta a punta sin depender de información
 real. Lee [«Antes de vender de verdad»](#antes-de-vender-de-verdad) antes de
 publicarla.
 
+### Documentación
+
+| Archivo | Para qué |
+|---|---|
+| Este README | Arrancar, usar y publicar la tienda |
+| [`arquitectura.md`](arquitectura.md) | Cómo está construida por dentro: capas, datos, decisiones |
+| [`reporte.md`](reporte.md) | Qué cambió en la reconstrucción y qué queda pendiente |
+| [`CLAUDE.md`](CLAUDE.md) | Contrato de trabajo: convenciones, API y reglas al tocar código |
+
 ---
 
 ## Arrancar
