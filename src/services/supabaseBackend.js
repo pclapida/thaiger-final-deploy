@@ -14,9 +14,11 @@
  */
 
 import { supabase } from '../supabase';
-import { SEED_PRODUCTS } from '../data/seed';
 import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data/settings';
-import { computeCartTotals, configurePricing, getUnitPrice } from '../lib/pricing';
+// Ya no se importa la aritmética de precios: en este backend la hace
+// Postgres (create_order). Aquí sólo se sincronizan los umbrales para que
+// el resumen del carrito coincida con lo que va a cobrar el servidor.
+import { configurePricing } from '../lib/pricing';
 import {
   isValidEmail,
   normalizeEmail,
@@ -72,17 +74,20 @@ function sanitizeProductPayload(data) {
 // ------------------------------------------------------------------ productos
 
 export const products = {
+  // Sin red de seguridad a propósito. La versión anterior devolvía el catálogo
+  // de demostración cuando la consulta fallaba o la tabla estaba vacía: en una
+  // tienda real eso enseña mercancía que no existe, el cliente la mete al
+  // carrito y se entera hasta el checkout. Mejor un error honesto.
   async list() {
     const { data, error } = await supabase.from('products').select('*').order('id', { ascending: false });
-    // Si la tabla no existe o el proyecto está caído, la tienda sigue navegable.
-    if (error || !data || data.length === 0) return SEED_PRODUCTS;
-    return data;
+    if (error) throw new Error(`No se pudo cargar el catálogo: ${error.message}`);
+    return data || [];
   },
 
   async get(id) {
     const { data, error } = await supabase.from('products').select('*').eq('id', id).maybeSingle();
-    if (error || !data) return SEED_PRODUCTS.find((p) => String(p.id) === String(id)) || null;
-    return data;
+    if (error) throw new Error(`No se pudo cargar el producto: ${error.message}`);
+    return data || null;
   },
 
   async create(data) {
@@ -169,73 +174,43 @@ export const orders = {
     return data || [];
   },
 
-  async create({ userId, shippingInfo, paymentInfo, items }) {
-    // Refresca los umbrales configurados antes de calcular nada.
+  // `userId` ya no se usa: el dueño del pedido lo decide auth.uid() en el
+  // servidor, que es lo único que el navegador no puede falsificar.
+  async create({ shippingInfo, paymentInfo, items }) {
+    // Refresca los umbrales configurados: el resumen que ve el cliente debe
+    // cuadrar con lo que calculará el servidor.
     await settings.get();
 
+    // Validación de cortesía, para dar el error sin ir al servidor. La de
+    // verdad está en create_order(): esta se puede saltar desde la consola.
     const envio = sanitizeShipping(shippingInfo);
     if (!envio.fullName || !envio.address || !envio.city || !envio.zip || !envio.phone) {
       throw new Error('Faltan datos de la dirección de envío.');
     }
 
-    // Los precios se recalculan contra el catálogo: nunca se cobra lo que
-    // diga el navegador (ver la misma nota en localBackend.js).
-    const ids = items.map((item) => item.product_id);
-    const catalogo = unwrap(await supabase.from('products').select('*').in('id', ids));
-    const porId = new Map((catalogo || []).map((p) => [String(p.id), p]));
-
-    const lineas = items.map((item) => {
-      const producto = porId.get(String(item.product_id));
-      if (!producto) throw new Error(`El producto "${item.product_name || item.product_id}" ya no está disponible.`);
-
-      const quantity = Math.floor(Number(item.quantity));
-      if (!Number.isFinite(quantity) || quantity < 1) throw new Error('Hay una cantidad inválida en el carrito.');
-
-      const stock = Number(producto.stock);
-      if (Number.isFinite(stock) && quantity > stock) {
-        throw new Error(`Sólo quedan ${stock} unidades de "${producto.name}".`);
-      }
-      return { producto, quantity };
-    });
-
-    const totales = computeCartTotals(lineas.map(({ producto, quantity }) => ({ ...producto, quantity })));
-
-    const createdOrders = unwrap(
-      await supabase
-        .from('orders')
-        .insert({
-          user_id: userId,
-          subtotal: Number(totales.subtotal.toFixed(2)),
-          shipping_cost: Number(totales.shipping.toFixed(2)),
-          total: Number(totales.total.toFixed(2)),
-          tier: totales.tier,
-          shipping_info: envio,
-          payment_info: {
-            method: 'SPEI',
-            concepto: sanitizeText(paymentInfo?.concepto, { maxLength: 24 }),
-            banco: sanitizeText(paymentInfo?.banco, { maxLength: 60 }),
-          },
-          status: 'Pago Pendiente',
-        })
-        .select()
+    // TODO el pedido lo arma Postgres: precios, nivel, envío, total, estatus y
+    // el descuento de inventario, en una sola transacción. El navegador sólo
+    // dice qué y cuánto. No hay política de INSERT sobre `orders`, así que éste
+    // es el único camino (ver scripts/setup_supabase.sql).
+    const pedido = unwrap(
+      await supabase.rpc('create_order', {
+        p_items: items.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
+        p_shipping: envio,
+        p_payment: {
+          concepto: sanitizeText(paymentInfo?.concepto, { maxLength: 24 }),
+          banco: sanitizeText(paymentInfo?.banco, { maxLength: 60 }),
+        },
+      })
     );
 
-    if (!createdOrders || createdOrders.length === 0) {
-      throw new Error('No se pudo confirmar el pedido (revisa las políticas RLS de la tabla orders).');
+    if (!pedido?.id) {
+      throw new Error('No se pudo confirmar el pedido. Vuelve a intentarlo.');
     }
 
-    const order = createdOrders[0];
-    const orderItems = lineas.map(({ producto, quantity }) => ({
-      order_id: order.id,
-      product_id: producto.id,
-      product_name: producto.name,
-      quantity,
-      price_at_purchase: Number(getUnitPrice(producto, totales.tier).toFixed(2)),
-    }));
-
-    unwrap(await supabase.from('order_items').insert(orderItems));
-
-    return { ...order, order_items: orderItems };
+    return { ...pedido, order_items: pedido.order_items ?? [] };
   },
 
   async updateStatus(orderId, status) {
@@ -245,27 +220,7 @@ export const orders = {
   async remove(orderId) {
     unwrap(await supabase.from('order_items').delete().eq('order_id', orderId));
     unwrap(await supabase.from('orders').delete().eq('id', orderId));
-  },
-
-  async decrementStock(items) {
-    for (const item of items) {
-      const { error } = await supabase.rpc('decrement_stock', {
-        product_id: item.product_id,
-        qty: item.quantity,
-      });
-
-      if (error) {
-        // Respaldo si la función RPC no está instalada.
-        const current = await products.get(item.product_id);
-        const stock = Number(current?.stock);
-        if (!Number.isFinite(stock)) continue;
-        await supabase
-          .from('products')
-          .update({ stock: Math.max(0, stock - item.quantity) })
-          .eq('id', item.product_id);
-      }
-    }
-  },
+  }
 };
 
 // ---------------------------------------------------------------------- auth
@@ -362,9 +317,48 @@ export const auth = {
     return true;
   },
 
+  /**
+   * Pide el correo con el enlace para restablecer la contraseña.
+   *
+   * Responde igual exista o no la cuenta: si dijera "ese correo no está
+   * registrado", cualquiera podría usar el formulario para averiguar quién
+   * tiene cuenta en la tienda.
+   */
+  async requestPasswordReset(email) {
+    const destino = normalizeEmail(email);
+    if (!isValidEmail(destino)) throw new Error('El correo electrónico no es válido.');
+
+    const { error } = await supabase.auth.resetPasswordForEmail(destino, {
+      redirectTo: `${globalThis.location?.origin ?? ''}/reset-password`,
+    });
+
+    // Un fallo real se registra, pero no se le cuenta a quien está mirando.
+    if (error) console.error('No se pudo enviar el correo de recuperación:', error.message);
+    return { sent: true };
+  },
+
+  /** Fija la contraseña nueva usando la sesión temporal que trae el enlace. */
+  async completePasswordReset(newPassword) {
+    const error = validatePassword(newPassword);
+    if (error) throw new Error(error);
+
+    const { data } = await supabase.auth.getSession();
+    if (!data?.session) {
+      throw new Error('El enlace ya no sirve o caducó. Pide uno nuevo desde «Olvidé mi contraseña».');
+    }
+
+    unwrap(await supabase.auth.updateUser({ password: newPassword }));
+    return true;
+  },
+
   async uploadAvatar(file) {
+    const { data: sesion } = await supabase.auth.getUser();
+    if (!sesion?.user?.id) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+
     const extension = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}.${extension}`;
+    // La carpeta es el id de la cuenta: la política de Storage sólo deja
+    // escribir dentro de la propia, así que nadie pisa la foto de otra persona.
+    const fileName = `${sesion.user.id}/${Date.now()}-${Math.random().toString(16).slice(2, 8)}.${extension}`;
 
     const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(fileName, file);
     if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);

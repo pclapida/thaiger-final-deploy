@@ -331,6 +331,26 @@ describe('cuentas', () => {
   });
 });
 
+describe('recuperación de contraseña', () => {
+  it('valida el correo antes de intentar nada', async () => {
+    await expect(auth.requestPasswordReset('no-es-un-correo')).rejects.toThrow(/no es válido/i);
+  });
+
+  it('en modo local avisa que no hay correo, en vez de fingir que lo mandó', async () => {
+    // Da la misma respuesta exista o no la cuenta: el formulario no sirve para
+    // averiguar quién está registrado.
+    const conocida = await auth.requestPasswordReset(DEMO_CUSTOMER.email);
+    const inventada = await auth.requestPasswordReset('nadie@ejemplo.com');
+
+    expect(conocida).toEqual({ sent: false, reason: 'sin-correo' });
+    expect(inventada).toEqual(conocida);
+  });
+
+  it('completar el restablecimiento remite al administrador', async () => {
+    await expect(auth.completePasswordReset('NuevaClave123')).rejects.toThrow(/administrador/i);
+  });
+});
+
 describe('usuarios (panel de administración)', () => {
   it('sólo un administrador puede listarlos y tocarlos', async () => {
     await expect(users.list()).rejects.toThrow(/iniciar sesión/i);
@@ -538,7 +558,23 @@ describe('pedidos', () => {
     await comprar([{ product_id: 1, quantity: 1 }]);
 
     expect(await orders.listByUser(cliente.id)).toHaveLength(antes + 1);
-    expect(await orders.listByUser('otra-persona')).toHaveLength(0);
+
+    // Un pedido lleva dirección y teléfono: pedir los de otra cuenta se rechaza
+    // en vez de devolver una lista vacía.
+    await expect(orders.listByUser('otra-persona')).rejects.toThrow(/tus propios pedidos/i);
+  });
+
+  it('el administrador sí puede consultar los pedidos de una cuenta', async () => {
+    const cliente = await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
+    await comprar([{ product_id: 1, quantity: 1 }]);
+
+    await entrarComoAdmin();
+    expect((await orders.listByUser(cliente.id)).length).toBeGreaterThan(0);
+  });
+
+  it('sin sesión no se listan pedidos de nadie', async () => {
+    await auth.signOut();
+    await expect(orders.listByUser('quien-sea')).rejects.toThrow(/sesión/i);
   });
 
   it('sólo el administrador ve todos los pedidos', async () => {
@@ -569,17 +605,42 @@ describe('pedidos', () => {
     expect((await idb.getAll('order_items')).some((i) => i.order_id === pedido.id)).toBe(false);
   });
 
-  it('descuenta el inventario y nunca lo deja negativo', async () => {
+  it('descuenta el inventario en la misma operación que registra el pedido', async () => {
+    await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
     const antes = await products.get(1);
-    await orders.decrementStock([{ product_id: 1, quantity: 2 }]);
-    expect((await products.get(1)).stock).toBe(antes.stock - 2);
 
-    await orders.decrementStock([{ product_id: 1, quantity: 99999 }]);
-    expect((await products.get(1)).stock).toBe(0);
+    await comprar([{ product_id: 1, quantity: 2 }]);
+
+    // Sin llamada aparte: si hubiera que pedirlo a mano, un navegador cerrado a
+    // destiempo vendería sin descontar.
+    expect((await products.get(1)).stock).toBe(antes.stock - 2);
   });
 
-  it('ignora productos que ya no están en el catálogo', async () => {
-    await expect(orders.decrementStock([{ product_id: 999999, quantity: 1 }])).resolves.toBeUndefined();
+  it('un pedido rechazado no toca el inventario', async () => {
+    await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
+    const antes = await products.get(1);
+
+    await expect(comprar([{ product_id: 1, quantity: antes.stock + 1 }])).rejects.toThrow(/Sólo quedan/i);
+
+    expect((await products.get(1)).stock).toBe(antes.stock);
+  });
+
+  it('el subtotal cuadra con la suma de sus propias líneas', async () => {
+    await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
+
+    // Con oferta de por medio, que es donde aparecían los centavos sueltos.
+    const pedido = await comprar([
+      { product_id: 3, quantity: 7 },
+      { product_id: 9, quantity: 8 },
+      { product_id: 21, quantity: 3 },
+    ]);
+
+    const suma = pedido.order_items.reduce(
+      (acc, linea) => acc + linea.price_at_purchase * linea.quantity,
+      0
+    );
+    expect(pedido.subtotal).toBeCloseTo(suma, 2);
+    expect(pedido.total).toBeCloseTo(pedido.subtotal + pedido.shipping_cost, 2);
   });
 });
 
@@ -613,6 +674,25 @@ describe('mantenimiento', () => {
     expect(importados).toBe(2);
     expect(await products.list()).toHaveLength(2);
     expect((await products.get(2)).image_url).toBeNull();
+  });
+
+  it('un archivo inválido no deja el catálogo vacío', async () => {
+    await entrarComoAdmin();
+    const antes = (await products.list()).length;
+
+    // Tiene la forma correcta, pero un producto sin precio: sanitizeProduct
+    // lanza a media importación.
+    await expect(
+      maintenance.importData({
+        products: [
+          { id: 1, name: 'Bueno', brand: 'THAIGER LABS', category: 'Salud', price1: 300 },
+          { id: 2, name: 'Malo', brand: 'PURE CORE', category: 'Salud', price1: 0 },
+        ],
+      })
+    ).rejects.toThrow(/#2 del archivo no es válido/i);
+
+    // Lo que había sigue ahí: nada se borra hasta que el archivo entero pasa.
+    expect(await products.list()).toHaveLength(antes);
   });
 
   it('rechaza un archivo con otro formato', async () => {

@@ -57,6 +57,22 @@ export function resetPricingConfig() {
   return getPricingConfig();
 }
 
+/**
+ * Redondea a centavos.
+ *
+ * El dinero se cobra en centavos, así que el precio de cada línea se redondea
+ * ANTES de multiplicarlo por la cantidad. Si se suma sin redondear, el subtotal
+ * guardado no cuadra con la suma de las líneas del propio pedido, y además la
+ * aritmética de coma flotante de JavaScript se separa por un centavo de la de
+ * Postgres (`numeric`), que es exacta: el cliente vería un total y se le
+ * cobraría otro. Ver `precio_unitario()` en scripts/setup_supabase.sql.
+ */
+export function roundMoney(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round((number + Number.EPSILON) * 100) / 100;
+}
+
 export function formatPrice(value) {
   const number = Number(value);
   return new Intl.NumberFormat('es-MX', {
@@ -137,19 +153,25 @@ export function computeCartTotals(items = []) {
   );
   const tier = getTier(listTotal);
 
-  const subtotal = items.reduce(
-    (acc, item) => acc + getUnitPrice(item, tier) * (Number(item.quantity) || 0),
-    0
+  // Redondeado por línea: así el subtotal es exactamente la suma de lo que se
+  // guarda en cada `order_items.price_at_purchase`.
+  const subtotal = roundMoney(
+    items.reduce(
+      (acc, item) => acc + roundMoney(getUnitPrice(item, tier)) * (Number(item.quantity) || 0),
+      0
+    )
   );
 
   const shipping = getShippingCost(subtotal);
 
   // Lo que el cliente se ahorra frente al precio público sin oferta.
-  const savings = items.reduce((acc, item) => {
-    const publicPrice = getTierBasePrice(item, 1);
-    const paid = getUnitPrice(item, tier);
-    return acc + Math.max(0, publicPrice - paid) * (Number(item.quantity) || 0);
-  }, 0);
+  const savings = roundMoney(
+    items.reduce((acc, item) => {
+      const publicPrice = roundMoney(getTierBasePrice(item, 1));
+      const paid = roundMoney(getUnitPrice(item, tier));
+      return acc + Math.max(0, publicPrice - paid) * (Number(item.quantity) || 0);
+    }, 0)
+  );
 
   return {
     listTotal,
@@ -157,7 +179,7 @@ export function computeCartTotals(items = []) {
     subtotal,
     shipping,
     savings,
-    total: subtotal + shipping,
+    total: roundMoney(subtotal + shipping),
     missingForNextTier: amountToNextTier(listTotal),
     missingForFreeShipping: amountToFreeShipping(subtotal),
     itemCount: items.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0),

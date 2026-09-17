@@ -146,9 +146,12 @@ drop policy if exists "Usuarios ven sus pedidos" on public.orders;
 create policy "Usuarios ven sus pedidos" on public.orders
     for select using (auth.uid() = user_id or public.is_admin());
 
+-- OJO: no hay política de INSERT sobre orders, y es deliberado.
+-- Un insert directo dejaría que el navegador eligiera subtotal, total, tier y
+-- status (la RLS sólo sabe comprobar que el user_id sea el suyo). Los pedidos
+-- se crean únicamente con public.create_order(), que recalcula todo contra el
+-- catálogo. Si alguna vez vuelve a hacer falta, se crea aquí a conciencia.
 drop policy if exists "Usuarios crean sus pedidos" on public.orders;
-create policy "Usuarios crean sus pedidos" on public.orders
-    for insert with check (auth.uid() = user_id);
 
 drop policy if exists "Admins actualizan pedidos" on public.orders;
 create policy "Admins actualizan pedidos" on public.orders
@@ -165,11 +168,8 @@ create policy "Usuarios ven sus artículos" on public.order_items
         or exists (select 1 from public.orders o where o.id = order_id and o.user_id = auth.uid())
     );
 
+-- Igual que arriba: las líneas del pedido las escribe create_order().
 drop policy if exists "Usuarios crean sus artículos" on public.order_items;
-create policy "Usuarios crean sus artículos" on public.order_items
-    for insert with check (
-        exists (select 1 from public.orders o where o.id = order_id and o.user_id = auth.uid())
-    );
 
 drop policy if exists "Admins eliminan artículos" on public.order_items;
 create policy "Admins eliminan artículos" on public.order_items
@@ -198,17 +198,237 @@ insert into public.settings (id, value)
 values ('site', '{}'::jsonb)
 on conflict (id) do nothing;
 
--- ------------------------------------------------------- INVENTARIO (RPC)
-create or replace function public.decrement_stock(product_id bigint, qty integer)
-returns void
+-- ------------------------------------------------------ CREACIÓN DEL PEDIDO
+-- Ésta es la frontera de seguridad del cobro.
+--
+-- El navegador sólo manda QUÉ y CUÁNTO. Los precios, el nivel, el envío y el
+-- total se recalculan aquí contra el catálogo, el stock se valida y se descuenta
+-- en la MISMA transacción, y el estatus lo fija el servidor. Por eso `orders` y
+-- `order_items` no tienen política de INSERT: si la tuvieran, cualquiera con la
+-- anon key podría registrar un pedido de $1 marcado como pagado.
+--
+-- CUIDADO AL TOCAR PRECIOS: esta aritmética es el espejo de src/lib/pricing.js.
+-- Si cambias una, cambia la otra o el cliente verá un total y se le cobrará otro.
+
+/** Precio unitario según el nivel vigente, con la oferta ya aplicada. */
+create or replace function public.precio_unitario(p public.products, p_tier smallint)
+returns numeric
 language sql
+immutable
+set search_path = public
+as $$
+    -- Igual que getTierBasePrice(): si el precio del nivel no es mayor a cero,
+    -- se cae al precio público en lugar de regalar el producto.
+    select case
+               when p.is_on_sale
+                    and p.discount_percent > 0
+                    and p.discount_percent < 100
+               then base * (1 - p.discount_percent::numeric / 100)
+               else base
+           end
+      from (
+          select case
+                     when p_tier = 3 and p.price3 > 0 then p.price3
+                     when p_tier = 2 and p.price2 > 0 then p.price2
+                     else p.price1
+                 end as base
+      ) as nivel;
+$$;
+
+/**
+ * Registra un pedido completo. Devuelve el pedido con sus líneas, en el mismo
+ * formato que espera `supabaseBackend.orders.create`.
+ *
+ *   p_items:    [{"product_id": 1, "quantity": 2}, ...]
+ *   p_shipping: {"fullName","phone","address","city","zip","notes"}
+ *   p_payment:  {"concepto","banco"}
+ */
+create or replace function public.create_order(
+    p_items jsonb,
+    p_shipping jsonb,
+    p_payment jsonb
+)
+returns jsonb
+language plpgsql
 security definer
 set search_path = public
 as $$
-    update public.products
-       set stock = greatest(0, stock - qty)
-     where id = product_id;
+declare
+    v_user        uuid := auth.uid();
+    v_cfg         jsonb;
+    v_tier2       numeric;
+    v_tier3       numeric;
+    v_free_from   numeric;
+    v_ship_cost   numeric;
+    v_list_total  numeric := 0;
+    v_subtotal    numeric := 0;
+    v_shipping    numeric := 0;
+    v_tier        smallint := 1;
+    v_lineas      jsonb := '[]'::jsonb;
+    v_envio       jsonb;
+    v_concepto    text;
+    v_order       public.orders;
+    v_items       jsonb;
+    v_prod        public.products;
+    r             record;
+begin
+    if v_user is null then
+        raise exception 'Necesitas iniciar sesión para comprar.';
+    end if;
+
+    if p_items is null
+       or jsonb_typeof(p_items) <> 'array'
+       or jsonb_array_length(p_items) = 0 then
+        raise exception 'El carrito está vacío.';
+    end if;
+
+    -- Dirección: los mismos campos obligatorios que pide el checkout.
+    if coalesce(btrim(p_shipping->>'fullName'), '') = ''
+       or coalesce(btrim(p_shipping->>'phone'), '') = ''
+       or coalesce(btrim(p_shipping->>'address'), '') = ''
+       or coalesce(btrim(p_shipping->>'city'), '') = ''
+       or coalesce(btrim(p_shipping->>'zip'), '') = '' then
+        raise exception 'Faltan datos de la dirección de envío.';
+    end if;
+
+    -- Umbrales configurados desde el panel (con los de fábrica como respaldo).
+    select value into v_cfg from public.settings where id = 'site';
+    v_tier2     := coalesce((v_cfg->'tiers'->>'tier2From')::numeric, 10000);
+    v_tier3     := coalesce((v_cfg->'tiers'->>'tier3From')::numeric, 20000);
+    v_free_from := coalesce((v_cfg->'shipping'->>'freeFrom')::numeric, 5000);
+    v_ship_cost := coalesce((v_cfg->'shipping'->>'cost')::numeric, 250);
+    if v_tier3 < v_tier2 then v_tier3 := v_tier2; end if;
+
+    -- Se bloquean las filas del catálogo SIEMPRE en orden de id: si dos carritos
+    -- comparten productos, uno espera al otro en vez de cruzarse (y dos compras
+    -- de la última unidad no pasan las dos). El orden fijo evita el interbloqueo.
+    perform 1
+       from public.products
+      where id in (
+                select distinct (item->>'product_id')::bigint
+                  from jsonb_array_elements(p_items) as item
+            )
+      order by id
+        for update;
+
+    -- Primera pasada: validar y sumar a precio de lista (el nivel se decide con
+    -- precios de lista, para que el escalón no dependa del descuento).
+    for r in
+        select (item->>'product_id')::bigint                   as pid,
+               floor(coalesce((item->>'quantity')::numeric, 0))::int as qty
+          from jsonb_array_elements(p_items) as item
+    loop
+        select * into v_prod from public.products where id = r.pid;
+
+        if not found then
+            raise exception 'El producto "%" ya no está disponible.', r.pid;
+        end if;
+        if r.qty < 1 then
+            raise exception 'Hay una cantidad inválida en el carrito.';
+        end if;
+        if r.qty > v_prod.stock then
+            raise exception 'Sólo quedan % unidades de "%".', v_prod.stock, v_prod.name;
+        end if;
+
+        v_list_total := v_list_total + v_prod.price1 * r.qty;
+        v_lineas := v_lineas || jsonb_build_object('pid', r.pid, 'qty', r.qty);
+    end loop;
+
+    if v_list_total >= v_tier3 then
+        v_tier := 3;
+    elsif v_list_total >= v_tier2 then
+        v_tier := 2;
+    else
+        v_tier := 1;
+    end if;
+
+    -- Segunda pasada: ya con el nivel decidido, el precio que se cobra.
+    for r in
+        select (linea->>'pid')::bigint as pid,
+               (linea->>'qty')::int    as qty
+          from jsonb_array_elements(v_lineas) as linea
+    loop
+        select * into v_prod from public.products where id = r.pid;
+        -- Redondeado ANTES de multiplicar, igual que computeCartTotals(): el
+        -- subtotal tiene que ser la suma exacta de los price_at_purchase.
+        v_subtotal := v_subtotal + round(public.precio_unitario(v_prod, v_tier), 2) * r.qty;
+    end loop;
+
+    v_subtotal := round(v_subtotal, 2);
+
+    if v_subtotal = 0 or v_subtotal >= v_free_from then
+        v_shipping := 0;
+    else
+        v_shipping := v_ship_cost;
+    end if;
+
+    -- El texto que escribió una persona se recorta aquí también: la RPC es
+    -- pública para quien tenga sesión, así que no puede fiarse del front.
+    v_envio := jsonb_build_object(
+        'fullName', left(btrim(p_shipping->>'fullName'), 90),
+        'phone',    left(btrim(p_shipping->>'phone'), 25),
+        'address',  left(btrim(p_shipping->>'address'), 160),
+        'city',     left(btrim(p_shipping->>'city'), 60),
+        'zip',      left(btrim(p_shipping->>'zip'), 10),
+        'notes',    left(btrim(coalesce(p_shipping->>'notes', '')), 300)
+    );
+
+    v_concepto := left(btrim(coalesce(p_payment->>'concepto', '')), 24);
+    if v_concepto = '' then
+        v_concepto := 'TH-' || upper(substr(md5(random()::text), 1, 4));
+    end if;
+
+    insert into public.orders (user_id, status, subtotal, shipping_cost, total, tier,
+                               shipping_info, payment_info)
+    values (
+        v_user,
+        'Pago Pendiente',                      -- el estatus nunca lo elige el cliente
+        v_subtotal,
+        v_shipping,
+        v_subtotal + v_shipping,
+        v_tier,
+        v_envio,
+        jsonb_build_object(
+            'method',   'SPEI',
+            'concepto', v_concepto,
+            'banco',    left(btrim(coalesce(p_payment->>'banco', '')), 60)
+        )
+    )
+    returning * into v_order;
+
+    -- Las líneas, con el precio ya resuelto, y el descuento de inventario en la
+    -- misma transacción: si algo falla aquí, el pedido entero se deshace.
+    with nuevas as (
+        insert into public.order_items (order_id, product_id, product_name, quantity, price_at_purchase)
+        select v_order.id,
+               p.id,
+               p.name,
+               (linea->>'qty')::int,
+               round(public.precio_unitario(p, v_tier), 2)
+          from jsonb_array_elements(v_lineas) as linea
+          join public.products p on p.id = (linea->>'pid')::bigint
+        returning product_id, product_name, quantity, price_at_purchase
+    )
+    select coalesce(jsonb_agg(to_jsonb(nuevas)), '[]'::jsonb) into v_items from nuevas;
+
+    update public.products p
+       set stock = greatest(0, p.stock - (linea->>'qty')::int)
+      from jsonb_array_elements(v_lineas) as linea
+     where p.id = (linea->>'pid')::bigint;
+
+    return to_jsonb(v_order) || jsonb_build_object('order_items', v_items);
+end;
 $$;
+
+-- Sólo quien tiene sesión puede comprar. `public` incluye a `anon`.
+revoke execute on function public.create_order(jsonb, jsonb, jsonb) from public;
+grant  execute on function public.create_order(jsonb, jsonb, jsonb) to authenticated;
+
+-- La RPC `decrement_stock` de la primera versión era `security definer` y
+-- quedaba abierta a cualquiera con la anon key: se podía agotar un producto
+-- ajeno (o inflarlo mandando una cantidad negativa). Ya no hace falta, porque
+-- create_order() descuenta el inventario. Se elimina si quedó de antes.
+drop function if exists public.decrement_stock(bigint, integer);
 
 -- ------------------------------------------------------------- ALMACENAMIENTO
 insert into storage.buckets (id, name, public)
@@ -223,10 +443,30 @@ drop policy if exists "Imágenes públicas" on storage.objects;
 create policy "Imágenes públicas" on storage.objects
     for select using (bucket_id in ('product-images', 'avatars'));
 
+-- Las fotos del catálogo son del catálogo: sólo el administrador las toca.
+-- (Antes bastaba con tener cuenta, así que cualquier cliente registrado podía
+-- escribir en el bucket público de la tienda.)
 drop policy if exists "Usuarios autenticados suben imágenes" on storage.objects;
-create policy "Usuarios autenticados suben imágenes" on storage.objects
-    for insert to authenticated
-    with check (bucket_id in ('product-images', 'avatars'));
+
+drop policy if exists "Admins gestionan fotos de producto" on storage.objects;
+create policy "Admins gestionan fotos de producto" on storage.objects
+    for all to authenticated
+    using (bucket_id = 'product-images' and public.is_admin())
+    with check (bucket_id = 'product-images' and public.is_admin());
+
+-- Cada quien escribe su avatar, y sólo dentro de su propia carpeta:
+-- avatars/<auth.uid()>/<archivo>. Así nadie pisa la foto de otra persona.
+drop policy if exists "Cada quien gestiona su avatar" on storage.objects;
+create policy "Cada quien gestiona su avatar" on storage.objects
+    for all to authenticated
+    using (
+        bucket_id = 'avatars'
+        and (storage.foldername(name))[1] = auth.uid()::text
+    )
+    with check (
+        bucket_id = 'avatars'
+        and (storage.foldername(name))[1] = auth.uid()::text
+    );
 
 -- =============================================================================
 -- Después de ejecutar esto:

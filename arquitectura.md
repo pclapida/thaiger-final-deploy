@@ -177,7 +177,19 @@ Mismas cinco tablas (`scripts/setup_supabase.sql`), más:
 - **Disparador `proteger_rol`** — si alguien edita su propio perfil y cambia
   `role`, se le restaura el valor anterior salvo que ya sea admin. Sin esto, la
   política de «cada quien edita su perfil» permitiría auto-ascenderse.
-- `decrement_stock(product_id, qty)` — descuento atómico de inventario.
+- `create_order(items, shipping, payment)` — **la frontera de seguridad del
+  cobro**. `security definer`: recalcula precios, nivel, envío y total contra el
+  catálogo, valida stock, inserta el pedido con sus líneas y descuenta inventario,
+  todo en una transacción. Bloquea las filas de producto en orden de id, así que
+  dos compras de la última unidad no pasan las dos. Sólo ejecutable con sesión
+  (`revoke ... from public`).
+- `precio_unitario(producto, nivel)` — espejo en SQL de `getUnitPrice()`.
+- **`orders` y `order_items` no tienen política de INSERT.** Es deliberado: con
+  una, cualquiera con la anon key podría registrar un pedido de $1 en estado
+  «Pagado», porque la RLS sólo sabe comprobar el `user_id`.
+- `decrement_stock(product_id, qty)` — **eliminada**. Era `security definer` y
+  quedaba abierta a `anon`: se podía agotar el inventario de un producto ajeno, o
+  inflarlo mandando una cantidad negativa.
 - Buckets `product-images` y `avatars`.
 
 El script es idempotente (`create table if not exists`, `drop policy if exists`,

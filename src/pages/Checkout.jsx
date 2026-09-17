@@ -148,18 +148,14 @@ export default function Checkout() {
     const lineas = cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity }));
 
     try {
+      // El inventario lo descuenta el propio `create`, en la misma operación:
+      // no hay una segunda llamada que se pueda perder a medio camino.
       const pedido = await ordersApi.create({
         userId: user.id,
         shippingInfo: formulario,
         paymentInfo: { concepto, banco: pago.bank },
         items: lineas,
       });
-
-      try {
-        await ordersApi.decrementStock(lineas);
-      } catch {
-        // El pedido ya quedó registrado; el inventario lo corrige el panel.
-      }
 
       toast.success(
         `¡Pedido registrado! Transfiere ${formatPrice(pedido?.total ?? total)} con el concepto ${concepto}.`,

@@ -209,6 +209,15 @@ export default function ThaigerLogin() {
             <p aria-live="polite" className="min-h-[1rem] text-center text-xs text-gray-400">
               {cargando ? 'Verificando tus datos...' : ''}
             </p>
+
+            <div className="text-center">
+              <Link
+                to="/forgot-password"
+                className="inline-flex min-h-[44px] items-center justify-center text-xs font-bold uppercase tracking-widest text-gray-400 transition-colors hover:text-brand-500"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </form>
 
           {IS_LOCAL_MODE && (

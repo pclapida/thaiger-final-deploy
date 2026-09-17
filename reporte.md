@@ -219,18 +219,24 @@ pasarela (Mercado Pago tiene SPEI con confirmación automática en México); el
 largo, un webhook bancario, que casi ningún banco mexicano ofrece a comercios
 pequeños.
 
-**3. No se envían correos.**
-Ni confirmación de pedido, ni cambio de estatus, ni recuperación de contraseña.
-Esto último significa que **quien olvide su contraseña depende del admin**.
-*Tip:* con Supabase, la recuperación por correo ya viene incluida
-(`auth.resetPasswordForEmail`); es lo más barato de activar. Para los correos de
-pedido, Resend o Supabase Edge Functions.
+**3. No se envían correos de pedido.**
+Ni confirmación ni aviso de cambio de estatus.
+*Tip:* Resend o una Edge Function de Supabase.
+*Ya resuelto:* la **recuperación de contraseña** (`/forgot-password` y
+`/reset-password`, sobre `auth.resetPasswordForEmail`). Responde igual exista o
+no la cuenta, para que el formulario no sirva de directorio. En modo local avisa
+que no hay servidor de correo en vez de fingir que el enlace va en camino.
 
 **4. Configurar Supabase.**
 En modo local los datos viven en un solo navegador: si el cliente entra desde el
 teléfono, no ve su pedido; si borra los datos del navegador, pierde todo.
 *Tip:* está todo listo — `scripts/setup_supabase.sql`, `upload-supabase.js` y
-`create-admin.js`. Es una tarde de trabajo, no un proyecto.
+`create-admin.js`.
+*Cuidado:* si ya ejecutaste una versión anterior del SQL, **vuelve a ejecutarlo**.
+El esquema nuevo elimina `decrement_stock` (estaba abierta a cualquiera con la
+anon key), quita las políticas de INSERT sobre `orders`/`order_items` y mueve la
+creación del pedido a `create_order()`. Con el esquema viejo, un cliente puede
+registrar pedidos de $1 marcados como pagados.
 *Cuidado:* nunca pongas la `service_role key` en una variable `VITE_*`; eso la
 publica en el navegador.
 

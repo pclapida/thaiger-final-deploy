@@ -29,6 +29,8 @@ const Cart = lazy(() => import('./pages/Cart'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const ThaigerLogin = lazy(() => import('./components/ThaigerLogin'));
 const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const UserProfile = lazy(() => import('./pages/UserProfile'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Terms = lazy(() => import('./pages/Terms'));
@@ -109,6 +111,9 @@ function Estructura() {
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/login" element={<ThaigerLogin />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  {/* Aquí aterriza el enlace del correo de recuperación. */}
+                  <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/about" element={<AboutUs />} />
                   <Route path="/wholesale" element={<Wholesale />} />

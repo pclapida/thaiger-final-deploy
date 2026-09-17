@@ -110,8 +110,8 @@ import { products, orders, auth, users, settings, maintenance,
 | Módulo | Operaciones | Permiso |
 |---|---|---|
 | `products` | `list()` `get(id)` `create(data)` `update(id, patch)` `remove(id)` `bulkUpdate(ids, patch)` `bulkRemove(ids)` `renameGroup('brand'\|'category', desde, hacia)` `uploadImage(file)` | lectura libre; escritura **admin** |
-| `orders` | `listAll()` `listByUser(id)` `create({...})` `updateStatus(id, estado)` `remove(id)` `decrementStock(items)` | `listAll`/`updateStatus`/`remove` **admin** |
-| `auth` | `getSession()` `onAuthStateChange(cb)` `signIn` `signUp` `signOut` `updateProfile(id, {name, avatar_url})` `changePassword(actual, nueva)` `uploadAvatar(file)` | — |
+| `orders` | `listAll()` `listByUser(id)` `create({...})` `updateStatus(id, estado)` `remove(id)` | `listAll`/`updateStatus`/`remove` **admin**; `listByUser` sólo la propia cuenta (o admin) |
+| `auth` | `getSession()` `onAuthStateChange(cb)` `signIn` `signUp` `signOut` `updateProfile(id, {name, avatar_url})` `changePassword(actual, nueva)` `requestPasswordReset(email)` `completePasswordReset(nueva)` `uploadAvatar(file)` | — |
 | `users` | `list()` `create({...})` `setRole(id, rol)` `remove(id)` `setPassword(id, nueva)` | **admin** |
 | `settings` | `get()` `update(patch)` `reset()` | lectura libre; escritura **admin** |
 | `maintenance` | `exportData()` `importData(backup)` `resetDemo()` | **admin** |
@@ -127,9 +127,21 @@ orders.create({
 });
 ```
 
-El backend reconstruye el pedido desde el catálogo, valida stock y calcula
-subtotal, envío y total. Devuelve `{ subtotal, shipping_cost, total, tier, order_items }`.
+El backend reconstruye el pedido desde el catálogo, valida stock, calcula
+subtotal, envío y total, fija el estatus y **descuenta el inventario en la misma
+operación**. Devuelve `{ subtotal, shipping_cost, total, tier, order_items }`.
 Lanza `Error` con mensaje en español si algo falla (sin stock, dirección incompleta).
+
+> No hay `decrementStock`: existía y se llamaba aparte desde el checkout, así que
+> un navegador cerrado a destiempo vendía sin descontar y dos compras simultáneas
+> de la última unidad pasaban las dos. Si necesitas ajustar inventario a mano, es
+> `products.update`, que exige admin.
+
+En modo Supabase esto **no** lo hace JavaScript: lo hace la función
+`create_order()` de Postgres (`scripts/setup_supabase.sql`), y las tablas
+`orders`/`order_items` no tienen política de INSERT, así que es el único camino.
+Su aritmética es el espejo de `src/lib/pricing.js`: **si tocas una, toca la otra**,
+o el cliente verá un total y se le cobrará otro.
 
 ---
 
@@ -183,16 +195,23 @@ Lanza `Error` con mensaje en español si algo falla (sin stock, dirección incom
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (238 pruebas, 13 archivos)
+npm test             # suite completa (247 pruebas, 13 archivos)
 npm run test:watch
 npm run lint
 npm run build
 
 node scripts/generate-demo-assets.mjs   # regenera las imágenes de ejemplo
+
+./scripts/pruebas-sql/ejecutar.sh       # pruebas del esquema de Supabase (necesita Postgres)
 ```
 
 Las pruebas por defecto corren en Node; los archivos que montan React llevan
 `// @vitest-environment jsdom` en la primera línea.
+
+`npm test` **no** cubre `scripts/setup_supabase.sql`, que desde `create_order()`
+es donde se decide lo que se cobra. Eso lo prueba `scripts/pruebas-sql/`, a mano
+y con un Postgres local (aún no está en CI). Córrelo si tocas el SQL, `pricing.js`
+o los umbrales de precio.
 
 Reglas que ahorran horas de depuración:
 
@@ -229,13 +248,20 @@ Lo que está resuelto:
   token en la cuenta, así que una sesión copiada a mano deja de servir.
 - **Bloqueo por fuerza bruta**: 5 fallos → 5 minutos de bloqueo. El mensaje de
   error es el mismo exista o no la cuenta.
-- **Precios no se confían al cliente**: ver §3.
+- **Precios no se confían al cliente**: ver §3. Con Supabase el cálculo vive en
+  Postgres, no en el navegador: aunque alguien llame a la API REST con la anon
+  key, no puede registrar un pedido de $1 marcado como pagado.
+- **Inventario**: se descuenta dentro de la transacción del pedido, con las filas
+  del catálogo bloqueadas en orden de id. No hay sobreventa en la carrera por la
+  última unidad (probado con 20 compradores simultáneos y 5 unidades).
 - **Autorización**: las mutaciones exigen sesión (y rol admin donde toca).
 - **Saneado** de todo lo que escribe una persona (`src/lib/security.js`);
   las URLs se filtran por esquema (`javascript:` bloqueado).
 - **Cabeceras HTTP** en `vercel.json`: CSP, HSTS, `X-Frame-Options: DENY`,
   `Referrer-Policy`, `Permissions-Policy`.
 - **RLS en Supabase** con un disparador que impide auto-ascenderse a admin.
+- **Storage por rol**: las fotos de producto sólo las escribe un admin; el avatar,
+  cada quien dentro de su propia carpeta (`avatars/<uid>/`).
 
 Lo que hay que saber:
 
@@ -269,8 +295,9 @@ Lista corta; el detalle y el orden sugerido están en [`reporte.md`](reporte.md)
 1. **No hay cobro real.** El checkout registra el pedido y muestra la CLABE de
    los ajustes, que sigue siendo la de ejemplo.
 2. **Nadie concilia los pagos**: las transferencias SPEI se verifican a mano.
-3. **No se envían correos**: ni confirmación, ni cambio de estatus, ni
-   recuperación de contraseña.
+3. **No se envían correos de pedido**: ni confirmación ni cambio de estatus.
+   (La recuperación de contraseña sí existe: `/forgot-password`, con el correo
+   que manda Supabase. En modo local se dice que no hay correo, no se finge.)
 4. **Opiniones locales**: viven en el `localStorage` de cada visitante.
 5. **Modo local ≠ producción**: los datos viven en un solo navegador.
 6. **Nadie ha abierto la tienda en un navegador real**: está verificada en jsdom.

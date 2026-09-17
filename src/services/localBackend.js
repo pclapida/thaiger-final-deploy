@@ -26,7 +26,7 @@ import {
 } from '../data/seed';
 import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data/settings';
 import { fileToOptimizedDataUrl } from '../lib/image';
-import { computeCartTotals, configurePricing, getUnitPrice } from '../lib/pricing';
+import { computeCartTotals, configurePricing, getUnitPrice, roundMoney } from '../lib/pricing';
 import {
   clearLoginFailures,
   createPasswordRecord,
@@ -409,7 +409,7 @@ async function buildOrderLines(items) {
       product_id: producto.id,
       product_name: producto.name,
       quantity,
-      price_at_purchase: Number(getUnitPrice(producto, totales.tier).toFixed(2)),
+      price_at_purchase: roundMoney(getUnitPrice(producto, totales.tier)),
     })),
   };
 }
@@ -434,6 +434,13 @@ export const orders = {
 
   async listByUser(userId) {
     await ensureSeeded();
+
+    // Un pedido lleva dirección y teléfono: no se listan los de otra persona.
+    const sesion = await requireSession();
+    if (sesion.id !== userId && sesion.role !== 'admin') {
+      throw new Error('Sólo puedes ver tus propios pedidos.');
+    }
+
     const all = await idb.getAll('orders');
     return sortByDateDesc(await attachItems(all.filter((order) => order.user_id === userId)));
   },
@@ -460,9 +467,9 @@ export const orders = {
       id: randomId(),
       user_id: dueño,
       status: 'Pago Pendiente',
-      subtotal: Number(totales.subtotal.toFixed(2)),
-      shipping_cost: Number(totales.shipping.toFixed(2)),
-      total: Number(totales.total.toFixed(2)),
+      subtotal: roundMoney(totales.subtotal),
+      shipping_cost: roundMoney(totales.shipping),
+      total: roundMoney(totales.total),
       tier: totales.tier,
       shipping_info: envio,
       payment_info: {
@@ -475,6 +482,17 @@ export const orders = {
 
     await idb.put('orders', order);
     await idb.putMany('order_items', orderItems.map((item) => ({ ...item, order_id: order.id })));
+
+    // El inventario baja aquí, no en una llamada aparte desde la página: si el
+    // navegador se cerrara entre una y otra, se habría vendido sin descontar.
+    // (En Supabase lo hace create_order() dentro de la misma transacción.)
+    for (const linea of orderItems) {
+      const producto = await idb.get('products', linea.product_id);
+      if (!producto) continue;
+      const stock = Number(producto.stock);
+      if (!Number.isFinite(stock)) continue;
+      await idb.put('products', { ...producto, stock: Math.max(0, stock - linea.quantity) });
+    }
 
     return { ...order, order_items: orderItems };
   },
@@ -497,18 +515,6 @@ export const orders = {
       await idb.remove('order_items', item.id);
     }
     await idb.remove('orders', orderId);
-  },
-
-  /** Descuenta inventario tras una compra. */
-  async decrementStock(items) {
-    await ensureSeeded();
-    for (const item of items) {
-      const product = await products.get(item.product_id);
-      if (!product) continue;
-      const stock = Number(product.stock);
-      if (!Number.isFinite(stock)) continue;
-      await idb.put('products', { ...product, stock: Math.max(0, stock - Number(item.quantity || 0)) });
-    }
   },
 };
 
@@ -665,6 +671,23 @@ export const auth = {
     const actualizado = { ...sesion, ...(await createPasswordRecord(newPassword)) };
     await idb.put('users', actualizado);
     return true;
+  },
+
+  /**
+   * En modo local no hay servidor que mande correos, así que se dice con todas
+   * sus letras en vez de fingir que el enlace va en camino. La recuperación de
+   * verdad existe con Supabase (ver el backend de al lado).
+   */
+  async requestPasswordReset(email) {
+    await ensureSeeded();
+    if (!isValidEmail(email)) throw new Error('El correo electrónico no es válido.');
+    return { sent: false, reason: 'sin-correo' };
+  },
+
+  async completePasswordReset() {
+    throw new Error(
+      'En modo local no hay recuperación por correo: pide a un administrador que restablezca tu contraseña desde el panel.'
+    );
   },
 
   async uploadAvatar(file) {
@@ -839,13 +862,24 @@ export const maintenance = {
     }
 
     const catalogo = await idb.getAll('products');
-    await idb.clear('products');
 
-    const limpios = backup.products.map((product, indice) => ({
-      ...sanitizeProduct(product, catalogo),
-      id: Number(product.id) || indice + 1,
-      created_at: product.created_at || new Date().toISOString(),
-    }));
+    // Primero se valida TODO el archivo, y sólo entonces se borra lo que hay.
+    // Al revés —que es como estaba— un archivo con una sola fila inválida
+    // dejaba el catálogo vacío: sanitizeProduct lanza, y para entonces el
+    // borrado ya había ocurrido. No había vuelta atrás.
+    const limpios = backup.products.map((product, indice) => {
+      try {
+        return {
+          ...sanitizeProduct(product, catalogo),
+          id: Number(product.id) || indice + 1,
+          created_at: product.created_at || new Date().toISOString(),
+        };
+      } catch (fallo) {
+        throw new Error(`El producto #${indice + 1} del archivo no es válido: ${fallo.message}`);
+      }
+    });
+
+    await idb.clear('products');
     await idb.putMany('products', limpios);
 
     if (backup.settings?.[0]) {

@@ -1,0 +1,109 @@
+\set ON_ERROR_STOP on
+set client_min_messages = notice;
+
+-- Supabase concede los privilegios de tabla a anon/authenticated; sin esto la
+-- prueba pasaría por el motivo equivocado ("permiso denegado" en vez de RLS).
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant usage, select on all sequences in schema public to anon, authenticated;
+
+do $$
+declare v_err text;
+begin
+    -- 1. La RPC vieja ya no existe.
+    perform pruebas.afirmar(
+        not exists (select 1 from pg_proc where proname = 'decrement_stock'),
+        'decrement_stock quedó eliminada');
+
+    -- 2. create_order no es ejecutable por anon (la anon key va en el bundle).
+    perform pruebas.afirmar(
+        not has_function_privilege('anon', 'public.create_order(jsonb,jsonb,jsonb)', 'execute'),
+        'anon NO puede ejecutar create_order');
+    perform pruebas.afirmar(
+        has_function_privilege('authenticated', 'public.create_order(jsonb,jsonb,jsonb)', 'execute'),
+        'authenticated sí puede ejecutar create_order');
+end $$;
+
+-- 3. Un cliente con sesión NO puede insertar un pedido a mano.
+set role authenticated;
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+
+do $$
+declare v_err text;
+begin
+    begin
+        insert into public.orders (user_id, status, subtotal, shipping_cost, total, tier, shipping_info, payment_info)
+        values ('11111111-1111-1111-1111-111111111111', 'Pagado', 1, 0, 1, 3, '{}'::jsonb, '{}'::jsonb);
+        raise exception 'el insert directo NO debería haber pasado';
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'un cliente no puede insertar un pedido de $1 marcado como pagado');
+    end;
+
+    -- 4. Tampoco puede escribir líneas de pedido a mano.
+    begin
+        insert into public.order_items (order_id, product_id, product_name, quantity, price_at_purchase)
+        values ((select id from public.orders limit 1), 1, 'Regalo', 1, 0);
+        raise exception 'el insert directo de líneas NO debería haber pasado';
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'un cliente no puede añadir líneas a un pedido');
+    end;
+
+    -- 5. Ni cambiar el estatus de su propio pedido a "Pagado".
+    begin
+        update public.orders set status = 'Pagado'
+         where user_id = '11111111-1111-1111-1111-111111111111';
+        perform pruebas.afirmar(not found, 'un cliente no puede marcar su pedido como pagado');
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'un cliente no puede marcar su pedido como pagado');
+    end;
+
+    -- 6. Ni tocar el catálogo.
+    begin
+        update public.products set price1 = 1 where id = 1;
+        perform pruebas.afirmar(not found, 'un cliente no puede cambiar precios del catálogo');
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'un cliente no puede cambiar precios del catálogo');
+    end;
+
+    -- 7. Pero sí puede comprar por la puerta buena.
+    perform public.create_order('[{"product_id": 3, "quantity": 1}]'::jsonb,
+        '{"fullName":"Juan Pérez","phone":"5512345678","address":"Av. Demo 123","city":"CDMX","zip":"01000"}'::jsonb,
+        '{}'::jsonb);
+    perform pruebas.afirmar(true, 'el camino legítimo (create_order) sigue funcionando con sesión');
+
+    -- 8. Y sólo ve sus propios pedidos.
+    perform pruebas.afirmar(
+        (select count(*) from public.orders where user_id <> '11111111-1111-1111-1111-111111111111') = 0,
+        'un cliente sólo ve sus pedidos');
+end $$;
+
+reset role;
+
+-- 9. Storage: un cliente cualquiera ya no escribe en el bucket del catálogo.
+insert into storage.buckets (id, name, public) values ('product-images','product-images',true) on conflict do nothing;
+grant select, insert, update, delete on storage.objects to anon, authenticated;
+
+set role authenticated;
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+do $$
+begin
+    begin
+        insert into storage.objects (bucket_id, name) values ('product-images', 'pirata.png');
+        raise exception 'no debería poder subir al bucket del catálogo';
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'un cliente no sube fotos al catálogo');
+    end;
+
+    -- Su propio avatar, dentro de su carpeta, sí.
+    insert into storage.objects (bucket_id, name)
+    values ('avatars', '11111111-1111-1111-1111-111111111111/foto.png');
+    perform pruebas.afirmar(true, 'cada quien sube su avatar en su carpeta');
+
+    begin
+        insert into storage.objects (bucket_id, name)
+        values ('avatars', '22222222-2222-2222-2222-222222222222/suplantada.png');
+        raise exception 'no debería poder escribir en la carpeta de otra persona';
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'nadie escribe en la carpeta de avatar de otra persona');
+    end;
+end $$;
+reset role;

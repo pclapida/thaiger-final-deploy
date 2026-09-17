@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { computeCartTotals } from '../lib/pricing';
+import { products as productsApi } from '../services/api';
 
 const CartContext = createContext(null);
 const STORAGE_KEY = 'thaiger_cart';
@@ -72,6 +73,48 @@ export const CartProvider = ({ children }) => {
       console.warn('No se pudo guardar el carrito.', error);
     }
   }, [cartItems]);
+
+  /**
+   * Un carrito guardado puede llevar días ahí, con los precios y el stock del
+   * día que se armó. Como el cobro lo recalcula el servidor contra el catálogo,
+   * si no refrescamos aquí el cliente vería un total y se le cobraría otro.
+   * Se hace una vez al arrancar, y en silencio: si el catálogo no responde, el
+   * carrito se queda como estaba y el checkout ya dará la cara.
+   */
+  useEffect(() => {
+    let vigente = true;
+
+    productsApi
+      .list()
+      .then((catalogo) => {
+        if (!vigente || catalogo.length === 0) return;
+        const porId = new Map(catalogo.map((p) => [String(p.id), p]));
+
+        setCartItems((prev) => {
+          const siguiente = prev
+            .map((item) => {
+              const fresco = porId.get(String(item.id));
+              // Un producto que ya no está en el catálogo se cae del carrito.
+              if (!fresco) return null;
+              const actualizado = normalizeItem({ ...fresco, quantity: item.quantity });
+              if (!actualizado) return null;
+              const cantidad = capToStock(actualizado.quantity, actualizado.stock);
+              return cantidad > 0 ? { ...actualizado, quantity: cantidad } : null;
+            })
+            .filter(Boolean);
+
+          // Sin cambios, misma referencia: no repintamos medio árbol de balde.
+          return JSON.stringify(siguiente) === JSON.stringify(prev) ? prev : siguiente;
+        });
+      })
+      .catch(() => {
+        /* el catálogo no respondió: seguimos con la copia guardada */
+      });
+
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   // Si la persona tiene la tienda abierta en dos pestañas, el carrito se
   // mantiene igual en las dos.
