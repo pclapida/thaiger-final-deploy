@@ -3,14 +3,19 @@ import {
   AlertTriangle,
   ChevronDown,
   ClipboardList,
+  ExternalLink,
+  Loader2,
   Printer,
   RefreshCw,
   Search,
   Trash2,
+  Truck,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { orders as pedidosApi } from '../../services/api';
+import { orders as pedidosApi, shipping as envioApi } from '../../services/api';
+import { useSettings } from '../../context/SettingsContext';
+import { TextField } from '../ui/Field';
 import { formatPrice } from '../../lib/pricing';
 import { ESTADOS_PEDIDO } from '../../lib/metrics';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -31,6 +36,7 @@ const BOTON_ICONO = 'grid h-11 w-11 shrink-0 place-items-center rounded transiti
 /** Colores del selector de estatus, dentro de la paleta del sitio. */
 function tonoEstado(estado) {
   if (estado === 'Entregado') return 'border-green-700 bg-green-950 text-green-400';
+  if (estado === 'Pagado') return 'border-emerald-700 bg-emerald-950 text-emerald-300';
   if (estado === 'Cancelado') return 'border-gray-700 bg-carbon-700 text-gray-400';
   if (estado === 'Enviado') return 'border-transparent bg-brand-700 text-white';
   return 'border-transparent bg-brand-600 text-white';
@@ -148,11 +154,156 @@ function DetallePedido({ pedido, paraImprimir = false }) {
             {pedido.payment_info?.banco ? ` · ${pedido.payment_info.banco}` : ''}
             <br />
             Concepto: <span className="font-mono font-bold">{pedido.payment_info?.concepto || '—'}</span>
+            {pedido.payment_reference && (
+              <>
+                <br />
+                Referencia de la pasarela: <span className="font-mono">{pedido.payment_reference}</span>
+              </>
+            )}
+            {pedido.paid_at && (
+              <>
+                <br />
+                Pagado el {fechaLarga(pedido.paid_at)}
+              </>
+            )}
             <br />
             <span className={tonoTenue}>{fechaLarga(pedido.created_at)}</span>
           </p>
+          {pedido.payment_info?.alerta && (
+            <p role="alert" className="mt-2 rounded-sm border border-red-800 bg-red-950/40 p-2 text-xs text-red-300">
+              Revisar: {pedido.payment_info.alerta}
+            </p>
+          )}
         </div>
+
+        {pedido.shipment?.tracking_number && (
+          <div>
+            <h3 className={`mb-1 text-[11px] font-bold uppercase tracking-widest ${tonoTenue}`}>Guía</h3>
+            <p className={`text-xs leading-relaxed ${tonoTexto}`}>
+              {pedido.shipment.carrier}
+              {pedido.shipment.service ? ` · ${pedido.shipment.service}` : ''}
+              <br />
+              Rastreo: <span className="font-mono font-bold">{pedido.shipment.tracking_number}</span>
+            </p>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Guía del pedido: la genera con la paquetería conectada, o captura a mano la
+ * que se compró fuera. Vive en el detalle desplegable, nunca en la impresión.
+ */
+function GuiaPedido({ pedido, onGuardada }) {
+  const { settings } = useSettings();
+  const conPaqueteria = (settings?.shipping?.provider || 'manual') !== 'manual';
+  const [trabajando, setTrabajando] = useState(false);
+  const [manual, setManual] = useState({ trackingNumber: '', carrier: '', trackingUrl: '' });
+  const guia = pedido.shipment;
+
+  const ejecutar = async (datos) => {
+    setTrabajando(true);
+    try {
+      const resultado = await envioApi.createLabel(pedido.id, datos);
+      onGuardada?.(resultado);
+      toast.success(`Guía ${resultado.tracking_number} guardada`);
+    } catch (fallo) {
+      toast.error(fallo?.message || 'No se pudo generar la guía.');
+    } finally {
+      setTrabajando(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-lg border border-gray-800 bg-carbon-900 p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
+        <Truck size={14} className="text-brand-500" aria-hidden="true" /> Guía de envío
+      </h3>
+
+      {guia?.tracking_number ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
+          <span>
+            {guia.carrier} · <span className="font-mono font-bold text-white">{guia.tracking_number}</span>
+          </span>
+          {guia.label_url && (
+            <a
+              href={guia.label_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[44px] items-center gap-1 text-xs font-bold uppercase tracking-widest text-brand-500 hover:text-white"
+            >
+              Descargar guía <ExternalLink size={12} aria-hidden="true" />
+            </a>
+          )}
+          {guia.tracking_url && (
+            <a
+              href={guia.tracking_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[44px] items-center gap-1 text-xs font-bold uppercase tracking-widest text-brand-500 hover:text-white"
+            >
+              Rastrear <ExternalLink size={12} aria-hidden="true" />
+            </a>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {conPaqueteria && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => ejecutar({ rateId: pedido.shipping_quote?.rate?.id })}
+                disabled={trabajando}
+                className={BOTON_SECUNDARIO}
+              >
+                {trabajando ? (
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Truck size={14} aria-hidden="true" />
+                )}
+                Generar guía con {pedido.shipping_quote?.rate?.carrier || 'la paquetería'}
+              </button>
+              {pedido.shipping_quote?.rate && (
+                <span className="text-xs text-gray-400">
+                  Tarifa elegida por el cliente: {pedido.shipping_quote.rate.service} ·{' '}
+                  {formatPrice(pedido.shipping_quote.rate.amount)}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <TextField
+              label="Número de rastreo"
+              value={manual.trackingNumber}
+              onChange={(e) => setManual((m) => ({ ...m, trackingNumber: e.target.value }))}
+              hint={conPaqueteria ? 'O captura una guía comprada fuera.' : 'De la guía que compraste con tu paquetería.'}
+            />
+            <TextField
+              label="Paquetería"
+              value={manual.carrier}
+              onChange={(e) => setManual((m) => ({ ...m, carrier: e.target.value }))}
+              placeholder="Estafeta, DHL, Solo Envíos..."
+            />
+            <TextField
+              label="Enlace de rastreo (opcional)"
+              type="url"
+              value={manual.trackingUrl}
+              onChange={(e) => setManual((m) => ({ ...m, trackingUrl: e.target.value }))}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => ejecutar(manual)}
+            disabled={trabajando || !manual.trackingNumber.trim()}
+            className={BOTON_SECUNDARIO}
+          >
+            Guardar rastreo
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -254,6 +405,12 @@ export default function PanelPedidos({
       );
       toast.error(`No se pudo actualizar: ${fallo.message}`);
     }
+  };
+
+  const guardarGuia = (pedido, shipment) => {
+    onCambiarPedidos?.((previos) =>
+      previos.map((actual) => (actual.id === pedido.id ? { ...actual, shipment } : actual))
+    );
   };
 
   const pedirBorrado = (pedido) => {
@@ -546,6 +703,7 @@ export default function PanelPedidos({
                               <tr className="border-b border-gray-800 bg-black/40">
                                 <td colSpan={6} className="px-4 py-5">
                                   <DetallePedido pedido={pedido} />
+                                  <GuiaPedido pedido={pedido} onGuardada={(guia) => guardarGuia(pedido, guia)} />
                                 </td>
                               </tr>
                             )}
@@ -626,6 +784,7 @@ export default function PanelPedidos({
                         {abierto && (
                           <div className="mt-4 border-t border-gray-800 pt-4">
                             <DetallePedido pedido={pedido} />
+                            <GuiaPedido pedido={pedido} onGuardada={(guia) => guardarGuia(pedido, guia)} />
                           </div>
                         )}
                       </li>

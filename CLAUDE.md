@@ -5,6 +5,7 @@ Contexto para trabajar en este repositorio. Léelo antes de tocar código.
 - Diseño interno a fondo → [`arquitectura.md`](arquitectura.md)
 - Qué se hizo y qué falta → [`reporte.md`](reporte.md)
 - Puesta en marcha y uso → [`README.md`](README.md)
+- Ponerla en línea paso a paso (Supabase, Cloudflare, Mercado Pago, correos, guías) → [`DESPLIEGUE.md`](DESPLIEGUE.md)
 
 ---
 
@@ -26,7 +27,7 @@ Catálogo base: **32 productos de ejemplo**, 6 marcas ficticias, 8 categorías, 
 |---|---|
 | **Tienda** | Catálogo con filtros (marca, categoría, precio), buscador, orden, ficha con opiniones y recomendaciones |
 | **Carrito** | Persistente y sincronizado entre pestañas, precios escalonados, respeta stock, avance hacia el envío gratis |
-| **Checkout** | Datos de envío + transferencia SPEI con concepto generado; **el backend recalcula precios y total** |
+| **Checkout** | Datos de envío, envío cotizado por C.P. (con paquetería conectada), pago por SPEI manual o **Mercado Pago** (tarjeta, SPEI, OXXO); **el backend recalcula precios y total** |
 | **Cuentas** | Registro, acceso, perfil con foto, libreta de direcciones, historial, favoritos, cambio de contraseña |
 | **Admin** (`/dashboard`) | Resumen, productos, pedidos, usuarios, carrusel, ajustes de la tienda y copias de seguridad |
 
@@ -55,7 +56,12 @@ páginas  →  src/services/api.js  →  ┌─ localBackend.js   (IndexedDB, po
 ```
 
 `api.js` elige según `isSupabaseConfigured`. Ambos exponen **la misma API**:
-`products`, `orders`, `auth`, `users`, `settings`, `maintenance`.
+`products`, `orders`, `auth`, `users`, `settings`, `maintenance`, `payments`, `shipping`.
+
+Lo que necesita un servidor de verdad (hablar con Mercado Pago, con la
+paquetería, mandar correos) vive en **Edge Functions** de Supabase
+(`supabase/functions/`). En modo local esas operaciones se explican en vez de
+fingirse (`payments.start` lanza; `shipping.quote` devuelve la tarifa fija).
 
 **Nunca importes `supabase` directamente en una página.** Usa `services/api`.
 Si agregas una operación de datos, impleméntala en *los dos* backends.
@@ -96,6 +102,17 @@ src/
     settings.js         configuración inicial de la tienda y del carrusel
   test/                 setup.js (polyfills) y utils.jsx (renderWithProviders, entrarComoAdmin)
 scripts/                SQL de Supabase, alta de admin, carga de catálogo, generador de imágenes
+  pruebas-sql/          banco de pruebas del esquema contra un Postgres real
+supabase/
+  config.toml           qué funciones van sin JWT (webhooks)
+  functions/
+    _shared/            supabase.ts (clientes), http.ts, mercadopago.ts, correo.ts,
+                        plantillas.ts (correos), envios/ (paquete, manual, skydropx)
+    crear-pago/         preferencia de Checkout Pro para un pedido (sesión)
+    mp-webhook/         confirma el pago: firma HMAC → API de MP → marcar_pedido_pagado()
+    notificar-pedido/   correos por pedido nuevo y cambio de estatus (disparador de la base)
+    cotizar-envio/      tarifas por C.P. para el carrito → shipping_quotes
+    generar-guia/       guía con la paquetería, o captura manual del rastreo (admin)
 ```
 
 ---
@@ -115,6 +132,8 @@ import { products, orders, auth, users, settings, maintenance,
 | `users` | `list()` `create({...})` `setRole(id, rol)` `remove(id)` `setPassword(id, nueva)` | **admin** |
 | `settings` | `get()` `update(patch)` `reset()` | lectura libre; escritura **admin** |
 | `maintenance` | `exportData()` `importData(backup)` `resetDemo()` | **admin** |
+| `payments` | `start(orderId)` → `{ init_point }` (Checkout Pro) | sesión; sólo Supabase |
+| `shipping` | `quote({ zip, items })` → `{ quote_id, rates }` · `createLabel(orderId, { rateId } \| { trackingNumber, carrier, trackingUrl })` | `quote` sesión; `createLabel` **admin** |
 
 **`orders.create` no acepta precios.** Su firma es:
 
@@ -122,10 +141,15 @@ import { products, orders, auth, users, settings, maintenance,
 orders.create({
   userId,
   shippingInfo,                                  // { fullName, phone, address, city, zip }
-  paymentInfo,                                   // { concepto, banco }
+  paymentInfo,                                   // { provider: 'spei'|'mercadopago', concepto, banco }
   items: [{ product_id, quantity }],             // ← sólo qué y cuánto
+  shippingRate,                                  // { quote_id, rate_id } de shipping.quote, o null
 });
 ```
+
+Con `shippingRate`, el precio del envío lo lee Postgres de `shipping_quotes`
+(la escribió la Edge Function), nunca del navegador: el cliente elige *cuál*,
+no *cuánto*. El envío gratis por umbral se respeta igual (lo absorbe la tienda).
 
 El backend reconstruye el pedido desde el catálogo, valida stock, calcula
 subtotal, envío y total, fija el estatus y **descuenta el inventario en la misma
@@ -195,7 +219,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (247 pruebas, 13 archivos)
+npm test             # suite completa (280 pruebas, 17 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -259,6 +283,12 @@ Lo que está resuelto:
   las URLs se filtran por esquema (`javascript:` bloqueado).
 - **Cabeceras HTTP** en `vercel.json`: CSP, HSTS, `X-Frame-Options: DENY`,
   `Referrer-Policy`, `Permissions-Policy`.
+- **Pagos**: el navegador nunca ve el access token de Mercado Pago. `crear-pago`
+  arma la preferencia con los importes del pedido; `mp-webhook` verifica la
+  firma HMAC (`x-signature`), consulta el pago en la API y sólo entonces llama a
+  `marcar_pedido_pagado()`, que exige que el monto coincida con el total. Esa
+  función es la **única** forma de poner `paid_at`; sólo la ejecuta la service_role.
+- **Notificaciones de la base** con secreto compartido (`x-thaiger-secret`).
 - **RLS en Supabase** con un disparador que impide auto-ascenderse a admin.
 - **Storage por rol**: las fotos de producto sólo las escribe un admin; el avatar,
   cada quien dentro de su propia carpeta (`avatars/<uid>/`).
@@ -292,12 +322,15 @@ Todo lo que se ve al arrancar es de ejemplo:
 
 Lista corta; el detalle y el orden sugerido están en [`reporte.md`](reporte.md).
 
-1. **No hay cobro real.** El checkout registra el pedido y muestra la CLABE de
-   los ajustes, que sigue siendo la de ejemplo.
-2. **Nadie concilia los pagos**: las transferencias SPEI se verifican a mano.
-3. **No se envían correos de pedido**: ni confirmación ni cambio de estatus.
-   (La recuperación de contraseña sí existe: `/forgot-password`, con el correo
-   que manda Supabase. En modo local se dice que no hay correo, no se finge.)
+1. **Todo está construido pero nada está encendido**: falta crear las cuentas
+   (Supabase, Cloudflare, Mercado Pago, Resend) y cargar los secretos. El orden
+   exacto está en [`DESPLIEGUE.md`](DESPLIEGUE.md).
+2. **Con SPEI manual, alguien concilia a mano**; con Mercado Pago el pedido
+   pasa solo a «Pagado». Los correos de pedido y de estatus salen solos en
+   cuanto Resend esté configurado.
+3. **El adaptador de Skydropx no se ha probado contra su API en vivo** (no
+   había credenciales): el mapeo de campos está aislado y documentado para
+   ajustarlo con la primera respuesta real.
 4. **Opiniones locales**: viven en el `localStorage` de cada visitante.
 5. **Modo local ≠ producción**: los datos viven en un solo navegador.
 6. **Nadie ha abierto la tienda en un navegador real**: está verificada en jsdom.

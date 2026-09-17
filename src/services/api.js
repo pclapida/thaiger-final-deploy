@@ -28,5 +28,9 @@ export const auth = backend.auth;
 export const users = backend.users;
 export const settings = backend.settings;
 export const maintenance = backend.maintenance;
+/** Pasarela de pago (Mercado Pago). Sólo funciona con Supabase. */
+export const payments = backend.payments;
+/** Cotización de envío y guías. */
+export const shipping = backend.shipping;
 
 export default backend;

@@ -96,6 +96,14 @@ create table if not exists public.products (
 create index if not exists products_brand_idx on public.products (brand);
 create index if not exists products_category_idx on public.products (category);
 
+-- Peso y medidas del paquete, para cotizar el envío con la paquetería.
+-- Valores por defecto razonables para un bote de suplemento: se afinan en el
+-- formulario de cada producto.
+alter table public.products add column if not exists weight_g integer not null default 500;
+alter table public.products add column if not exists length_cm integer not null default 20;
+alter table public.products add column if not exists width_cm integer not null default 15;
+alter table public.products add column if not exists height_cm integer not null default 10;
+
 alter table public.products enable row level security;
 
 -- El catálogo es público; sólo el administrador escribe.
@@ -124,6 +132,12 @@ create table if not exists public.orders (
 alter table public.orders add column if not exists subtotal numeric not null default 0;
 alter table public.orders add column if not exists shipping_cost numeric not null default 0;
 alter table public.orders add column if not exists tier smallint not null default 1;
+-- Pasarela de pago y guía de envío (segunda versión del esquema).
+alter table public.orders add column if not exists payment_provider text not null default 'spei';
+alter table public.orders add column if not exists payment_reference text;
+alter table public.orders add column if not exists paid_at timestamptz;
+alter table public.orders add column if not exists shipping_quote jsonb;
+alter table public.orders add column if not exists shipment jsonb;
 
 create index if not exists orders_user_idx on public.orders (user_id);
 create index if not exists orders_created_idx on public.orders (created_at desc);
@@ -198,6 +212,30 @@ insert into public.settings (id, value)
 values ('site', '{}'::jsonb)
 on conflict (id) do nothing;
 
+-- ------------------------------------------------------ COTIZACIONES DE ENVÍO
+-- La Edge Function `cotizar-envio` pide tarifas a la paquetería y las guarda
+-- aquí con caducidad. Al crear el pedido, el cliente sólo manda el id de la
+-- cotización y el de la tarifa: el precio del envío se toma de esta tabla, no
+-- del navegador. Sólo escribe aquí la service_role (no hay política de INSERT).
+create table if not exists public.shipping_quotes (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    provider text not null,
+    destination_zip text not null,
+    package jsonb not null,
+    rates jsonb not null,
+    created_at timestamptz not null default now(),
+    expires_at timestamptz not null
+);
+
+create index if not exists shipping_quotes_user_idx on public.shipping_quotes (user_id, created_at desc);
+
+alter table public.shipping_quotes enable row level security;
+
+drop policy if exists "Cada quien ve sus cotizaciones" on public.shipping_quotes;
+create policy "Cada quien ve sus cotizaciones" on public.shipping_quotes
+    for select using (auth.uid() = user_id or public.is_admin());
+
 -- ------------------------------------------------------ CREACIÓN DEL PEDIDO
 -- Ésta es la frontera de seguridad del cobro.
 --
@@ -235,18 +273,25 @@ as $$
       ) as nivel;
 $$;
 
+-- La firma cambió (cuarto parámetro): se retira la versión anterior para que
+-- no queden dos sobrecargas y PostgREST no sepa a cuál llamar.
+drop function if exists public.create_order(jsonb, jsonb, jsonb);
+
 /**
  * Registra un pedido completo. Devuelve el pedido con sus líneas, en el mismo
  * formato que espera `supabaseBackend.orders.create`.
  *
- *   p_items:    [{"product_id": 1, "quantity": 2}, ...]
- *   p_shipping: {"fullName","phone","address","city","zip","notes"}
- *   p_payment:  {"concepto","banco"}
+ *   p_items:         [{"product_id": 1, "quantity": 2}, ...]
+ *   p_shipping:      {"fullName","phone","address","city","zip","notes"}
+ *   p_payment:       {"provider": "spei" | "mercadopago", "concepto", "banco"}
+ *   p_shipping_rate: {"quote_id", "rate_id"} — tarifa cotizada, o null para la
+ *                    regla fija de la tienda.
  */
 create or replace function public.create_order(
     p_items jsonb,
     p_shipping jsonb,
-    p_payment jsonb
+    p_payment jsonb,
+    p_shipping_rate jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -267,6 +312,10 @@ declare
     v_lineas      jsonb := '[]'::jsonb;
     v_envio       jsonb;
     v_concepto    text;
+    v_provider    text;
+    v_quote       public.shipping_quotes;
+    v_rate        jsonb;
+    v_ship_quote  jsonb := null;
     v_order       public.orders;
     v_items       jsonb;
     v_prod        public.products;
@@ -356,10 +405,52 @@ begin
 
     v_subtotal := round(v_subtotal, 2);
 
-    if v_subtotal = 0 or v_subtotal >= v_free_from then
-        v_shipping := 0;
+    -- Envío: la regla fija de la tienda, o la tarifa que cotizó la paquetería.
+    -- La tarifa se lee de shipping_quotes (la escribió la Edge Function), nunca
+    -- del parámetro: el cliente sólo elige cuál, no cuánto.
+    if p_shipping_rate is not null
+       and jsonb_typeof(p_shipping_rate) = 'object'
+       and coalesce(p_shipping_rate->>'quote_id', '') <> '' then
+
+        select * into v_quote
+          from public.shipping_quotes
+         where id = (p_shipping_rate->>'quote_id')::uuid
+           and user_id = v_user;
+
+        if not found then
+            raise exception 'La cotización de envío ya no es válida. Vuelve a cotizar.';
+        end if;
+        if v_quote.expires_at < now() then
+            raise exception 'La cotización de envío caducó. Vuelve a cotizar.';
+        end if;
+        if v_quote.destination_zip <> left(btrim(p_shipping->>'zip'), 10) then
+            raise exception 'La cotización de envío es para otro código postal. Vuelve a cotizar.';
+        end if;
+
+        select linea into v_rate
+          from jsonb_array_elements(v_quote.rates) as linea
+         where linea->>'id' = p_shipping_rate->>'rate_id';
+
+        if v_rate is null then
+            raise exception 'La tarifa de envío elegida ya no está disponible. Vuelve a cotizar.';
+        end if;
+
+        v_shipping := round((v_rate->>'amount')::numeric, 2);
+        v_ship_quote := jsonb_build_object(
+            'quote_id', v_quote.id,
+            'provider', v_quote.provider,
+            'rate',     v_rate,
+            'package',  v_quote.package
+        );
     else
         v_shipping := v_ship_cost;
+    end if;
+
+    -- El envío gratis es una promesa de la tienda y se cumple también con
+    -- tarifa cotizada: la guía se sigue generando con la tarifa, pero la absorbe
+    -- la tienda.
+    if v_subtotal = 0 or v_subtotal >= v_free_from then
+        v_shipping := 0;
     end if;
 
     -- El texto que escribió una persona se recorta aquí también: la RPC es
@@ -378,8 +469,11 @@ begin
         v_concepto := 'TH-' || upper(substr(md5(random()::text), 1, 4));
     end if;
 
+    -- Sólo las pasarelas que la tienda conoce; cualquier otra cosa es SPEI.
+    v_provider := case when p_payment->>'provider' = 'mercadopago' then 'mercadopago' else 'spei' end;
+
     insert into public.orders (user_id, status, subtotal, shipping_cost, total, tier,
-                               shipping_info, payment_info)
+                               shipping_info, payment_info, payment_provider, shipping_quote)
     values (
         v_user,
         'Pago Pendiente',                      -- el estatus nunca lo elige el cliente
@@ -389,10 +483,12 @@ begin
         v_tier,
         v_envio,
         jsonb_build_object(
-            'method',   'SPEI',
+            'method',   case when v_provider = 'mercadopago' then 'Mercado Pago' else 'SPEI' end,
             'concepto', v_concepto,
             'banco',    left(btrim(coalesce(p_payment->>'banco', '')), 60)
-        )
+        ),
+        v_provider,
+        v_ship_quote
     )
     returning * into v_order;
 
@@ -421,14 +517,114 @@ end;
 $$;
 
 -- Sólo quien tiene sesión puede comprar. `public` incluye a `anon`.
-revoke execute on function public.create_order(jsonb, jsonb, jsonb) from public;
-grant  execute on function public.create_order(jsonb, jsonb, jsonb) to authenticated;
+revoke execute on function public.create_order(jsonb, jsonb, jsonb, jsonb) from public;
+grant  execute on function public.create_order(jsonb, jsonb, jsonb, jsonb) to authenticated;
 
 -- La RPC `decrement_stock` de la primera versión era `security definer` y
 -- quedaba abierta a cualquiera con la anon key: se podía agotar un producto
 -- ajeno (o inflarlo mandando una cantidad negativa). Ya no hace falta, porque
 -- create_order() descuenta el inventario. Se elimina si quedó de antes.
 drop function if exists public.decrement_stock(bigint, integer);
+
+-- ------------------------------------------------------- CONFIRMACIÓN DEL PAGO
+-- La llama la Edge Function `mp-webhook` con la service_role, después de
+-- verificar la firma de Mercado Pago y de consultar el pago en su API. Es la
+-- ÚNICA forma de que un pedido pase a «Pagado»: ni el cliente ni el panel
+-- pueden hacerlo (el panel puede moverlo a los estatus de operación, pero
+-- `paid_at` sólo lo pone esta función).
+create or replace function public.marcar_pedido_pagado(
+    p_order_id  uuid,
+    p_provider  text,
+    p_reference text,
+    p_amount    numeric
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_order public.orders;
+begin
+    select * into v_order from public.orders where id = p_order_id for update;
+
+    if not found then
+        raise exception 'El pedido % no existe.', p_order_id;
+    end if;
+
+    -- Mercado Pago reintenta las notificaciones: la segunda vez no pasa nada.
+    if v_order.paid_at is not null then
+        return to_jsonb(v_order) || '{"ya_estaba_pagado": true}'::jsonb;
+    end if;
+
+    if abs(v_order.total - p_amount) > 0.01 then
+        raise exception 'El monto pagado (%) no coincide con el total del pedido (%).', p_amount, v_order.total;
+    end if;
+
+    if v_order.status <> 'Pago Pendiente' then
+        raise exception 'El pedido está en estatus "%": no se puede marcar como pagado.', v_order.status;
+    end if;
+
+    update public.orders
+       set status            = 'Pagado',
+           paid_at           = now(),
+           payment_provider  = p_provider,
+           payment_reference = p_reference
+     where id = p_order_id
+    returning * into v_order;
+
+    return to_jsonb(v_order);
+end;
+$$;
+
+revoke execute on function public.marcar_pedido_pagado(uuid, text, text, numeric) from public, anon, authenticated;
+grant  execute on function public.marcar_pedido_pagado(uuid, text, text, numeric) to service_role;
+
+-- ------------------------------------------------------------ NOTIFICACIONES
+-- Cada pedido nuevo y cada cambio de estatus avisa a la Edge Function
+-- `notificar-pedido`, que manda los correos. Se configura una vez, con la URL
+-- del proyecto y un secreto compartido que la función comprueba:
+--
+--   select public.configurar_notificaciones(
+--       'https://<ref>.supabase.co/functions/v1/notificar-pedido',
+--       '<el mismo valor que NOTIFY_SECRET en los secretos de la función>'
+--   );
+--
+-- Requiere tener activados los Database Webhooks del proyecto
+-- (Dashboard → Database → Webhooks → Enable), que es lo que instala
+-- `supabase_functions.http_request`.
+create or replace function public.configurar_notificaciones(p_url text, p_secret text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_headers text := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-thaiger-secret', p_secret
+    )::text;
+begin
+    execute 'drop trigger if exists notificar_pedido_nuevo on public.orders';
+    execute 'drop trigger if exists notificar_pedido_estatus on public.orders';
+
+    execute format(
+        'create trigger notificar_pedido_nuevo after insert on public.orders
+            for each row execute function supabase_functions.http_request(%L, %L, %L, %L, %L)',
+        p_url, 'POST', v_headers, '{}', '5000'
+    );
+
+    -- Sólo cuando cambia el estatus: editar la dirección no manda correo.
+    execute format(
+        'create trigger notificar_pedido_estatus after update on public.orders
+            for each row when (old.status is distinct from new.status)
+            execute function supabase_functions.http_request(%L, %L, %L, %L, %L)',
+        p_url, 'POST', v_headers, '{}', '5000'
+    );
+end;
+$$;
+
+revoke execute on function public.configurar_notificaciones(text, text) from public, anon, authenticated;
 
 -- ------------------------------------------------------------- ALMACENAMIENTO
 insert into storage.buckets (id, name, public)

@@ -6,11 +6,15 @@ import {
   Check,
   CheckCircle,
   Copy,
+  CreditCard,
   Landmark,
+  Loader2,
   Lock,
   MapPin,
+  RefreshCw,
   ShieldCheck,
   ShoppingCart,
+  Truck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -21,8 +25,8 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
-import { orders as ordersApi } from '../services/api';
-import { computeCartTotals, formatPrice, getUnitPrice } from '../lib/pricing';
+import { orders as ordersApi, payments as paymentsApi, shipping as shippingApi } from '../services/api';
+import { computeCartTotals, formatPrice, getPricingConfig, getUnitPrice, roundMoney } from '../lib/pricing';
 import { fadeUp, resolveVariants } from '../lib/motion';
 
 const ENVIO_VACIO = { fullName: '', phone: '', address: '', city: '', zip: '' };
@@ -94,9 +98,65 @@ export default function Checkout() {
 
   // Los datos bancarios salen de la configuración de la tienda, nunca del código.
   const pago = settings?.payment || {};
+  const pasarela = pago.gateway === 'mercadopago';
+  // Con una paquetería conectada, el envío se cotiza por código postal.
+  const cotizaEnvio = (settings?.shipping?.provider || 'manual') !== 'manual';
   const concepto = useMemo(() => `TH-${Math.floor(1000 + Math.random() * 9000)}`, []);
 
-  const { tier: nivel, subtotal, shipping: envio, savings: ahorro, total } = computeCartTotals(cartItems);
+  const totales = computeCartTotals(cartItems);
+  const { tier: nivel, subtotal, savings: ahorro } = totales;
+
+  const [cotizacion, setCotizacion] = useState({ estado: 'inactiva', quote_id: null, rates: [], error: '' });
+  const [tarifaId, setTarifaId] = useState('');
+  const [reintentos, setReintentos] = useState(0);
+  const tarifa = cotizacion.rates.find((opcion) => opcion.id === tarifaId) || null;
+
+  // Con tarifa cotizada, el envío es el de la paquetería. La promesa de envío
+  // gratis se respeta igual (la absorbe la tienda): es lo mismo que hace
+  // create_order() en el servidor, así que el total de aquí es el que se cobra.
+  const envio =
+    tarifa && cotizacion.quote_id
+      ? subtotal >= getPricingConfig().freeShippingFrom
+        ? 0
+        : roundMoney(tarifa.amount)
+      : totales.shipping;
+  const total = roundMoney(subtotal + envio);
+
+  // Se cotiza en cuanto hay un C.P. completo, con una pausa para no pedir una
+  // tarifa por cada dígito. Sin paquetería conectada no hace nada.
+  const cp = soloDigitos(formulario.zip);
+  useEffect(() => {
+    if (!cotizaEnvio || cp.length !== 5 || cartItems.length === 0) return undefined;
+
+    let vigente = true;
+    const temporizador = setTimeout(async () => {
+      setCotizacion({ estado: 'cargando', quote_id: null, rates: [], error: '' });
+      setTarifaId('');
+      try {
+        const respuesta = await shippingApi.quote({
+          zip: cp,
+          items: cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+        });
+        if (!vigente) return;
+        const rates = respuesta?.rates || [];
+        setCotizacion({ estado: 'lista', quote_id: respuesta?.quote_id ?? null, rates, error: '' });
+        setTarifaId(rates[0]?.id || '');
+      } catch (fallo) {
+        if (!vigente) return;
+        setCotizacion({
+          estado: 'error',
+          quote_id: null,
+          rates: [],
+          error: fallo?.message || 'No pudimos cotizar el envío.',
+        });
+      }
+    }, 600);
+
+    return () => {
+      vigente = false;
+      clearTimeout(temporizador);
+    };
+  }, [cotizaEnvio, cp, cartItems, reintentos]);
 
   const errores = useMemo(() => validarEnvio(formulario), [formulario]);
   const envioCompleto = Object.keys(errores).length === 0;
@@ -139,6 +199,14 @@ export default function Checkout() {
       setAviso(AVISO_INCOMPLETO);
       return;
     }
+    if (cotizaEnvio && cotizacion.estado === 'cargando') {
+      setAviso('Espera un momento: estamos cotizando el envío.');
+      return;
+    }
+    if (cotizaEnvio && cotizacion.quote_id && !tarifa) {
+      setAviso('Elige una opción de envío.');
+      return;
+    }
 
     setAviso('');
     setEnviando(true);
@@ -153,9 +221,20 @@ export default function Checkout() {
       const pedido = await ordersApi.create({
         userId: user.id,
         shippingInfo: formulario,
-        paymentInfo: { concepto, banco: pago.bank },
+        paymentInfo: { provider: pasarela ? 'mercadopago' : 'spei', concepto, banco: pago.bank },
         items: lineas,
+        shippingRate: cotizacion.quote_id && tarifa ? { quote_id: cotizacion.quote_id, rate_id: tarifa.id } : null,
       });
+
+      if (pasarela) {
+        // Checkout Pro vive en el sitio de Mercado Pago: es una navegación
+        // completa. El pedido ya quedó registrado como «Pago Pendiente»; si el
+        // cliente cierra la pestaña, puede retomar el pago desde su perfil.
+        const inicio = await paymentsApi.start(pedido.id);
+        clearCart();
+        window.location.assign(inicio.init_point);
+        return;
+      }
 
       toast.success(
         `¡Pedido registrado! Transfiere ${formatPrice(pedido?.total ?? total)} con el concepto ${concepto}.`,
@@ -299,6 +378,76 @@ export default function Checkout() {
                   error={errorDe('zip')}
                 />
               </div>
+
+              {cotizaEnvio && (
+                <div className="mt-6 rounded-lg border border-gray-800 bg-carbon-900 p-4" aria-live="polite">
+                  <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-300">
+                    <Truck size={16} className="text-brand-500" aria-hidden="true" /> Opciones de envío
+                  </h3>
+
+                  {cp.length !== 5 && (
+                    <p className="text-sm text-gray-400">Escribe tu código postal para cotizar el envío.</p>
+                  )}
+
+                  {cp.length === 5 && cotizacion.estado === 'cargando' && (
+                    <p role="status" className="flex items-center gap-2 text-sm text-gray-400">
+                      <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Cotizando con la paquetería...
+                    </p>
+                  )}
+
+                  {cp.length === 5 && cotizacion.estado === 'error' && (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p role="alert" className="text-sm text-red-400">
+                        {cotizacion.error}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setReintentos((n) => n + 1)}
+                        className="inline-flex min-h-[44px] items-center gap-2 rounded-sm border border-gray-700 px-4 text-xs font-bold uppercase tracking-widest text-gray-300 hover:border-brand-500 hover:text-white"
+                      >
+                        <RefreshCw size={14} aria-hidden="true" /> Volver a cotizar
+                      </button>
+                    </div>
+                  )}
+
+                  {cotizacion.estado === 'lista' && (
+                    <fieldset className="space-y-2">
+                      <legend className="sr-only">Elige cómo quieres recibir tu pedido</legend>
+                      {cotizacion.rates.map((opcion) => (
+                        <label
+                          key={opcion.id}
+                          className={`flex cursor-pointer items-center gap-3 rounded-sm border p-3 text-sm transition-colors ${
+                            tarifaId === opcion.id ? 'border-brand-500 bg-brand-600/10' : 'border-gray-800 hover:border-gray-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="tarifa-envio"
+                            value={opcion.id}
+                            checked={tarifaId === opcion.id}
+                            onChange={() => setTarifaId(opcion.id)}
+                            className="h-4 w-4 accent-orange-600"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-bold text-white">{opcion.carrier}</span>
+                            <span className="block text-xs text-gray-400">
+                              {opcion.service}
+                              {opcion.days ? ` · ${opcion.days} día${opcion.days === 1 ? '' : 's'}` : ''}
+                            </span>
+                          </span>
+                          <span className="whitespace-nowrap font-bold text-white">
+                            {subtotal >= getPricingConfig().freeShippingFrom ? (
+                              <span className="text-xs uppercase text-emerald-500">Gratis</span>
+                            ) : (
+                              formatPrice(opcion.amount)
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
+                </div>
+              )}
             </motion.section>
 
             <motion.section
@@ -310,10 +459,44 @@ export default function Checkout() {
             >
               <span aria-hidden="true" className="absolute left-0 top-0 h-full w-1 bg-brand-600" />
               <h2 className="mb-6 flex items-center gap-2 text-xl font-bold uppercase tracking-wider">
-                <Landmark size={20} className="text-brand-500" aria-hidden="true" /> Pago por transferencia (SPEI)
+                {pasarela ? (
+                  <>
+                    <CreditCard size={20} className="text-brand-500" aria-hidden="true" /> Pago con Mercado Pago
+                  </>
+                ) : (
+                  <>
+                    <Landmark size={20} className="text-brand-500" aria-hidden="true" /> Pago por transferencia (SPEI)
+                  </>
+                )}
               </h2>
 
-              {pago.isDemo && (
+              {pasarela && (
+                <div className="space-y-4 text-sm leading-relaxed text-gray-400">
+                  <p>
+                    Al confirmar te llevamos al sitio seguro de Mercado Pago para pagar con{' '}
+                    <strong className="text-white">
+                      tarjeta de crédito o débito, transferencia SPEI o en efectivo en OXXO
+                    </strong>
+                    . Tus datos bancarios nunca pasan por nuestra tienda.
+                  </p>
+                  <ul className="grid gap-2 sm:grid-cols-3">
+                    {['Tarjeta', 'SPEI', 'OXXO'].map((medio) => (
+                      <li
+                        key={medio}
+                        className="rounded-sm border border-gray-800 bg-carbon-900 px-3 py-2 text-center text-xs font-bold uppercase tracking-widest text-gray-300"
+                      >
+                        {medio}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs">
+                    En cuanto Mercado Pago confirme el cobro, tu pedido pasa a «Pagado» y te avisamos por correo. Si no
+                    terminas el pago, el pedido queda apartado y puedes retomarlo desde tu perfil.
+                  </p>
+                </div>
+              )}
+
+              {!pasarela && pago.isDemo && (
                 <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
                   <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={20} aria-hidden="true" />
                   <p className="text-amber-200">
@@ -324,6 +507,8 @@ export default function Checkout() {
                 </div>
               )}
 
+              {!pasarela && (
+                <>
               <p className="mb-6 text-sm leading-relaxed text-gray-400">
                 {pago.instructions ||
                   'Tu pedido se aparta al confirmarlo. Para procesarlo debes transferir el total a esta cuenta usando el concepto indicado.'}
@@ -368,6 +553,8 @@ export default function Checkout() {
                   </dd>
                 </div>
               </dl>
+                </>
+              )}
             </motion.section>
           </div>
 
@@ -398,7 +585,7 @@ export default function Checkout() {
                   <span className="text-white">{formatPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Envío</span>
+                  <span>Envío{tarifa && cotizacion.quote_id ? ` · ${tarifa.carrier}` : ''}</span>
                   <span className="text-white">
                     {envio === 0 ? (
                       <span className="text-xs font-bold uppercase text-emerald-500">Gratis</span>
@@ -414,7 +601,9 @@ export default function Checkout() {
                   </div>
                 )}
                 <div className="mt-4 flex items-end justify-between border-t border-gray-800 pt-4">
-                  <span className="text-sm font-bold uppercase tracking-widest text-white">Total a transferir</span>
+                  <span className="text-sm font-bold uppercase tracking-widest text-white">
+                    {pasarela ? 'Total a pagar' : 'Total a transferir'}
+                  </span>
                   <span className="text-3xl font-extrabold tracking-tight text-brand-500">{formatPrice(total)}</span>
                 </div>
               </div>
@@ -437,6 +626,10 @@ export default function Checkout() {
               >
                 {enviando ? (
                   <span className="latido-marca">Procesando...</span>
+                ) : pasarela ? (
+                  <>
+                    <CreditCard size={18} aria-hidden="true" /> Pagar con Mercado Pago
+                  </>
                 ) : (
                   <>
                     <CheckCircle size={18} aria-hidden="true" /> Pagar Ahora

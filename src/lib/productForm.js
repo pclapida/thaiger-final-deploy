@@ -16,6 +16,10 @@ export function buildProductPayload(form) {
 
   const stock = Number(form.stock);
   const discount = Number(form.discount_percent);
+  const medida = (valor, defecto) => {
+    const n = Math.round(Number(valor));
+    return Number.isFinite(n) && n > 0 ? n : defecto;
+  };
   const price2 = Number(form.price2);
   const price3 = Number(form.price3);
 
@@ -33,6 +37,11 @@ export function buildProductPayload(form) {
       stock: Number.isFinite(stock) && stock >= 0 ? stock : 0,
       is_on_sale: Boolean(form.is_on_sale),
       discount_percent: form.is_on_sale && discount > 0 ? discount : 0,
+      // Peso y medidas del paquete, para cotizar el envío. Vacío = un bote típico.
+      weight_g: medida(form.weight_g, 500),
+      length_cm: medida(form.length_cm, 20),
+      width_cm: medida(form.width_cm, 15),
+      height_cm: medida(form.height_cm, 10),
     },
   };
 }

@@ -1,10 +1,7 @@
 \set ON_ERROR_STOP on
 set client_min_messages = notice;
 
--- Supabase concede los privilegios de tabla a anon/authenticated; sin esto la
--- prueba pasaría por el motivo equivocado ("permiso denegado" en vez de RLS).
-grant select, insert, update, delete on all tables in schema public to anon, authenticated;
-grant usage, select on all sequences in schema public to anon, authenticated;
+-- Los privilegios de tabla de anon/authenticated se conceden en 10-datos.sql.
 
 do $$
 declare v_err text;
@@ -16,10 +13,10 @@ begin
 
     -- 2. create_order no es ejecutable por anon (la anon key va en el bundle).
     perform pruebas.afirmar(
-        not has_function_privilege('anon', 'public.create_order(jsonb,jsonb,jsonb)', 'execute'),
+        not has_function_privilege('anon', 'public.create_order(jsonb,jsonb,jsonb,jsonb)', 'execute'),
         'anon NO puede ejecutar create_order');
     perform pruebas.afirmar(
-        has_function_privilege('authenticated', 'public.create_order(jsonb,jsonb,jsonb)', 'execute'),
+        has_function_privilege('authenticated', 'public.create_order(jsonb,jsonb,jsonb,jsonb)', 'execute'),
         'authenticated sí puede ejecutar create_order');
 end $$;
 

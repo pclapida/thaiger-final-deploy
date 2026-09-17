@@ -85,12 +85,38 @@ export const DEFAULT_SETTINGS = {
     instructions:
       'Tu pedido se aparta al confirmarlo. Para procesarlo debes transferir el total a esta cuenta usando el concepto indicado.',
     isDemo: true,
+    /**
+     * Cómo cobra la tienda: 'spei' (transferencia manual, los datos de arriba)
+     * o 'mercadopago' (Checkout Pro: tarjeta, SPEI y OXXO con confirmación
+     * automática). Mercado Pago necesita la tienda en Supabase con la Edge
+     * Function `crear-pago` desplegada; ver DESPLIEGUE.md.
+     */
+    gateway: 'spei',
   },
 
   /** Reglas de envío (las consume src/lib/pricing.js). */
   shipping: {
     freeFrom: 5000,
     cost: 250,
+    /**
+     * 'manual': se cobra `cost` y la guía se compra fuera (se captura el
+     * rastreo a mano). 'skydropx': el checkout cotiza con la paquetería por
+     * código postal y el panel genera la guía. Necesita las credenciales en
+     * los secretos de Supabase.
+     */
+    provider: 'manual',
+    /** Desde dónde sale todo: la paquetería lo pide para cotizar y para la guía. */
+    origin: {
+      name: '',
+      company: '',
+      street: '',
+      neighborhood: '',
+      city: '',
+      state: '',
+      zip: '',
+      phone: '',
+      email: '',
+    },
   },
 
   /** Umbrales de los niveles de precio por monto del carrito. */
@@ -144,7 +170,11 @@ export function withSettingsDefaults(saved) {
     id: SETTINGS_ID,
     store: { ...base.store, ...(saved.store || {}) },
     payment: { ...base.payment, ...(saved.payment || {}) },
-    shipping: { ...base.shipping, ...(saved.shipping || {}) },
+    shipping: {
+      ...base.shipping,
+      ...(saved.shipping || {}),
+      origin: { ...base.shipping.origin, ...(saved.shipping?.origin || {}) },
+    },
     tiers: { ...base.tiers, ...(saved.tiers || {}) },
     home: { ...base.home, ...(saved.home || {}) },
     social: { ...base.social, ...(saved.social || {}) },

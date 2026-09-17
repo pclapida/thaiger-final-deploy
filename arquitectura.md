@@ -555,3 +555,47 @@ las imágenes generadas coincidan con el catálogo**: si alguien cambia
 2. Ejecuta `node scripts/generate-demo-assets.mjs`.
 3. Las pruebas derivan las cifras de `SEED_PRODUCTS.length`, así que no hay
    números que actualizar a mano.
+
+---
+
+## Pagos, correos y envíos (Edge Functions)
+
+Lo que no puede vivir en el navegador —el access token de Mercado Pago, la
+API key de Resend, las credenciales de la paquetería— vive en Edge Functions
+de Supabase (`supabase/functions/`). Cada una es un `Deno.serve` pequeño; la
+lógica sin red (firma, empaquetado, plantillas, mapeos) está en `_shared/` y
+se prueba con Vitest desde Node.
+
+```
+Checkout ─► create_order()  ──────────────────────► orders («Pago Pendiente»)
+    │                                                    │ disparador
+    ├─► crear-pago ─► MP: preferencia ─► redirección     ▼
+    │                                            notificar-pedido ─► Resend
+    │      MP ─► mp-webhook ─► firma OK ─► GET /v1/payments/:id
+    │                              └─► marcar_pedido_pagado()  (monto == total)
+    │                                        └─► «Pagado» ─► disparador ─► correo
+    └─► cotizar-envio ─► paquetería ─► shipping_quotes (caduca) ─► create_order lee el precio
+
+Panel ─► generar-guia ─► paquetería (o captura manual) ─► orders.shipment
+      ─► «Enviado» ─► disparador ─► correo con rastreo
+```
+
+Decisiones que conviene conocer:
+
+- **`marcar_pedido_pagado()` es la única puerta a «Pagado»**: `security definer`,
+  ejecutable sólo por `service_role`, idempotente (Mercado Pago reintenta),
+  exige monto igual al total y estatus «Pago Pendiente». Un pago que no cuadra
+  no se marca: queda en `payment_info.alerta` y el panel lo enseña en rojo.
+- **El webhook responde 200 aunque no haga nada** una vez validada la firma;
+  si no, Mercado Pago reintenta durante días. Sólo un fallo de red devuelve 500.
+- **La tarifa de envío no viaja del navegador al pedido**: `cotizar-envio`
+  guarda las tarifas en `shipping_quotes` (por usuario, con caducidad) y
+  `create_order` toma el importe de ahí por `quote_id` + `rate_id`. Con el
+  proveedor manual no se guarda nada: aplica la tarifa fija.
+- **Proveedores de envío** cumplen una interfaz (`envios/tipos.ts`): `manual`
+  (tarifa fija, rastreo capturado a mano) y `skydropx`. Añadir Envia.com o
+  Pakke es un archivo más y una rama en `envios/index.ts`.
+- **Correos**: un disparador de Postgres (`configurar_notificaciones`) llama a
+  `notificar-pedido` en cada INSERT y en cada cambio de `status` de `orders`.
+  Ni el navegador ni el panel mandan correos: si el estatus cambia por
+  cualquier camino, el correo sale igual.

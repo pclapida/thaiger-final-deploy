@@ -68,7 +68,35 @@ function sanitizeProductPayload(data) {
     stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0,
     is_on_sale: Boolean(data.is_on_sale),
     discount_percent: data.is_on_sale && discount > 0 && discount < 100 ? Math.round(discount) : 0,
+    weight_g: medidaPositiva(data.weight_g, 500),
+    length_cm: medidaPositiva(data.length_cm, 20),
+    width_cm: medidaPositiva(data.width_cm, 15),
+    height_cm: medidaPositiva(data.height_cm, 10),
   };
+}
+
+function medidaPositiva(valor, defecto) {
+  const n = Math.round(Number(valor));
+  return Number.isFinite(n) && n > 0 ? n : defecto;
+}
+
+/**
+ * Llama a una Edge Function y traduce su error a un mensaje legible: la
+ * función responde `{ error: "..." }` en español, y supabase-js lo envuelve
+ * en un FunctionsHttpError cuyo cuerpo hay que leer aparte.
+ */
+async function invocarFuncion(nombre, body) {
+  const { data, error } = await supabase.functions.invoke(nombre, { body });
+  if (!error) return data;
+
+  let mensaje = error.message;
+  try {
+    const cuerpo = await error.context?.json?.();
+    if (cuerpo?.error) mensaje = cuerpo.error;
+  } catch {
+    /* sin cuerpo JSON: se queda el mensaje genérico */
+  }
+  throw new Error(mensaje || `No se pudo llamar a ${nombre}.`);
 }
 
 // ------------------------------------------------------------------ productos
@@ -176,7 +204,7 @@ export const orders = {
 
   // `userId` ya no se usa: el dueño del pedido lo decide auth.uid() en el
   // servidor, que es lo único que el navegador no puede falsificar.
-  async create({ shippingInfo, paymentInfo, items }) {
+  async create({ shippingInfo, paymentInfo, items, shippingRate }) {
     // Refresca los umbrales configurados: el resumen que ve el cliente debe
     // cuadrar con lo que calculará el servidor.
     await settings.get();
@@ -200,9 +228,13 @@ export const orders = {
         })),
         p_shipping: envio,
         p_payment: {
+          provider: paymentInfo?.provider === 'mercadopago' ? 'mercadopago' : 'spei',
           concepto: sanitizeText(paymentInfo?.concepto, { maxLength: 24 }),
           banco: sanitizeText(paymentInfo?.banco, { maxLength: 60 }),
         },
+        // Tarifa cotizada ({ quote_id, rate_id }): el precio lo lee Postgres de
+        // shipping_quotes; aquí sólo se dice cuál eligió el cliente.
+        p_shipping_rate: shippingRate?.quote_id ? { quote_id: shippingRate.quote_id, rate_id: shippingRate.rate_id } : null,
       })
     );
 
@@ -221,6 +253,43 @@ export const orders = {
     unwrap(await supabase.from('order_items').delete().eq('order_id', orderId));
     unwrap(await supabase.from('orders').delete().eq('id', orderId));
   }
+};
+
+// ------------------------------------------------------------------- pagos
+
+export const payments = {
+  /** Crea la preferencia de Checkout Pro y devuelve la URL a la que mandar al cliente. */
+  async start(orderId) {
+    return invocarFuncion('crear-pago', { order_id: orderId });
+  },
+};
+
+// ------------------------------------------------------------------ envíos
+
+export const shipping = {
+  /** Tarifas para el carrito y el C.P. Con proveedor manual, la tarifa fija. */
+  async quote({ zip, items }) {
+    return invocarFuncion('cotizar-envio', {
+      zip: String(zip ?? '').replace(/\D/g, ''),
+      items: (items || []).map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
+    });
+  },
+
+  /**
+   * Genera la guía con la paquetería, o captura una comprada fuera
+   * (`{ trackingNumber, carrier, trackingUrl, labelUrl }`). Sólo administradores.
+   */
+  async createLabel(orderId, datos = {}) {
+    const respuesta = await invocarFuncion('generar-guia', {
+      order_id: orderId,
+      rate_id: datos.rateId,
+      tracking_number: datos.trackingNumber,
+      carrier: datos.carrier,
+      tracking_url: datos.trackingUrl,
+      label_url: datos.labelUrl,
+    });
+    return respuesta?.shipment;
+  },
 };
 
 // ---------------------------------------------------------------------- auth

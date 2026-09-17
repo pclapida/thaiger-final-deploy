@@ -40,6 +40,7 @@ import {
   randomId,
   registerLoginFailure,
   sanitizeImageUrl,
+  sanitizeLinkUrl,
   sanitizeText,
   validatePassword,
   verifyPassword,
@@ -247,7 +248,18 @@ function sanitizeProduct(data, catalogo = []) {
     stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0,
     is_on_sale: Boolean(data.is_on_sale),
     discount_percent: data.is_on_sale && discount > 0 && discount < 100 ? Math.round(discount) : 0,
+    // Peso y medidas del paquete (para cotizar el envío). Los mismos defectos
+    // que el esquema de Supabase: un bote de suplemento.
+    weight_g: medidaPositiva(data.weight_g, 500),
+    length_cm: medidaPositiva(data.length_cm, 20),
+    width_cm: medidaPositiva(data.width_cm, 15),
+    height_cm: medidaPositiva(data.height_cm, 10),
   };
+}
+
+function medidaPositiva(valor, defecto) {
+  const n = Math.round(Number(valor));
+  return Number.isFinite(n) && n > 0 ? n : defecto;
 }
 
 export const products = {
@@ -445,6 +457,8 @@ export const orders = {
     return sortByDateDesc(await attachItems(all.filter((order) => order.user_id === userId)));
   },
 
+  // `shippingRate` ({ quote_id, rate_id }) sólo aplica con Supabase y una
+  // paquetería conectada; en modo local el envío es siempre la tarifa fija.
   async create({ userId, shippingInfo, paymentInfo, items }) {
     await ensureSeeded();
     // Refresca los umbrales configurados antes de calcular nada.
@@ -472,8 +486,13 @@ export const orders = {
       total: roundMoney(totales.total),
       tier: totales.tier,
       shipping_info: envio,
+      payment_provider: paymentInfo?.provider === 'mercadopago' ? 'mercadopago' : 'spei',
+      payment_reference: null,
+      paid_at: null,
+      shipping_quote: null,
+      shipment: null,
       payment_info: {
-        method: 'SPEI',
+        method: paymentInfo?.provider === 'mercadopago' ? 'Mercado Pago' : 'SPEI',
         concepto: sanitizeText(paymentInfo?.concepto, { maxLength: 24 }) || `TH-${randomId().slice(0, 4).toUpperCase()}`,
         banco: sanitizeText(paymentInfo?.banco, { maxLength: 60 }),
       },
@@ -515,6 +534,81 @@ export const orders = {
       await idb.remove('order_items', item.id);
     }
     await idb.remove('orders', orderId);
+  },
+};
+
+// ------------------------------------------------------------------- pagos
+
+/**
+ * En modo local no hay servidor que hable con Mercado Pago (el access token
+ * jamás puede ir en el navegador). Se dice claro en vez de fingir.
+ */
+export const payments = {
+  async start() {
+    throw new Error(
+      'Los pagos con Mercado Pago necesitan la tienda conectada a Supabase. En modo local el pago es por transferencia SPEI.'
+    );
+  },
+};
+
+// ------------------------------------------------------------------ envíos
+
+function sanitizeShipment(datos = {}) {
+  const tracking = sanitizeText(datos.trackingNumber, { maxLength: 80 });
+  if (!tracking) throw new Error('Escribe el número de rastreo de la guía.');
+  return {
+    provider: 'manual',
+    provider_shipment_id: null,
+    carrier: sanitizeText(datos.carrier, { maxLength: 60 }) || 'Paquetería',
+    service: '',
+    tracking_number: tracking,
+    tracking_url: sanitizeLinkUrl(datos.trackingUrl) || null,
+    label_url: sanitizeLinkUrl(datos.labelUrl) || null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export const shipping = {
+  /**
+   * Sin paquetería conectada, la única tarifa es la fija de los ajustes.
+   * Devuelve la misma forma que la Edge Function `cotizar-envio`, con
+   * `quote_id` nulo: el pedido se crea con la regla de siempre.
+   */
+  async quote({ zip, items } = {}) {
+    await ensureSeeded();
+    const cp = String(zip ?? '').replace(/\D/g, '');
+    if (cp.length !== 5) throw new Error('El código postal debe tener 5 dígitos.');
+    if (!Array.isArray(items) || items.length === 0) throw new Error('El carrito está vacío.');
+
+    const ajustes = await settings.get();
+    return {
+      quote_id: null,
+      provider: 'manual',
+      rates: [
+        {
+          id: 'tarifa-fija',
+          carrier: ajustes.store?.name || 'Envío estándar',
+          service: 'Envío a domicilio',
+          amount: Number(ajustes.shipping?.cost) || 0,
+          currency: 'MXN',
+          days: null,
+        },
+      ],
+      expires_at: null,
+    };
+  },
+
+  /** Captura a mano la guía comprada fuera (sólo administradores). */
+  async createLabel(orderId, datos = {}) {
+    await ensureSeeded();
+    await requireAdmin();
+
+    const order = await idb.get('orders', orderId);
+    if (!order) throw new Error('El pedido ya no existe.');
+
+    const shipment = sanitizeShipment(datos);
+    await idb.put('orders', { ...order, shipment });
+    return shipment;
   },
 };
 

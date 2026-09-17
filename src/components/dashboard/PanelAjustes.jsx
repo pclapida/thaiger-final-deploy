@@ -58,6 +58,14 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
     setDatos((previo) => ({ ...previo, [grupo]: { ...previo[grupo], [campo]: valor } }));
   };
 
+  const cambiarOrigen = (campo) => (evento) => {
+    const valor = evento.target.value;
+    setDatos((previo) => ({
+      ...previo,
+      shipping: { ...previo.shipping, origin: { ...(previo.shipping.origin || {}), [campo]: valor } },
+    }));
+  };
+
   const numero = (valor, respaldo = 0) => {
     const convertido = Number(valor);
     return Number.isFinite(convertido) && convertido >= 0 ? convertido : respaldo;
@@ -83,7 +91,12 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
     const parche = {
       store: datos.store,
       payment: datos.payment,
-      shipping: { freeFrom: numero(datos.shipping.freeFrom), cost: numero(datos.shipping.cost) },
+      shipping: {
+        freeFrom: numero(datos.shipping.freeFrom),
+        cost: numero(datos.shipping.cost),
+        provider: datos.shipping.provider === 'skydropx' ? 'skydropx' : 'manual',
+        origin: datos.shipping.origin,
+      },
       tiers: { tier2From: tier2, tier3From: tier3 },
       home: datos.home,
       social: Object.fromEntries(
@@ -233,6 +246,25 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
             />
           </div>
 
+          <div className="space-y-2 rounded-sm border border-gray-800 p-3">
+            <label htmlFor="ajustes-pasarela" className="block text-[11px] font-bold uppercase tracking-widest text-gray-300">
+              Cómo cobra la tienda
+            </label>
+            <select
+              id="ajustes-pasarela"
+              value={datos.payment.gateway === 'mercadopago' ? 'mercadopago' : 'spei'}
+              onChange={cambiar('payment', 'gateway')}
+              className="w-full rounded-sm border border-gray-700 bg-carbon-900 px-3 py-3 text-base text-white focus:border-brand-500 focus:outline-none"
+            >
+              <option value="spei">Transferencia SPEI manual (la cuenta de arriba)</option>
+              <option value="mercadopago">Mercado Pago (tarjeta, SPEI y OXXO con confirmación automática)</option>
+            </select>
+            <p className="text-xs leading-relaxed text-gray-400">
+              Mercado Pago necesita la tienda en Supabase con la función <code>crear-pago</code> desplegada y sus
+              credenciales cargadas (ver DESPLIEGUE.md). Los pedidos pasan solos a «Pagado» cuando el cobro se confirma.
+            </p>
+          </div>
+
           <label className="flex items-start gap-3 rounded-sm border border-gray-800 p-3">
             <input
               type="checkbox"
@@ -274,6 +306,51 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
             Una compra de {formatPrice(envioGratisDesde - 1)} paga {formatPrice(costoEnvio)} de envío; a partir de{' '}
             {formatPrice(envioGratisDesde)} el envío sale gratis.
           </p>
+
+          <div className="space-y-2 rounded-sm border border-gray-800 p-3">
+            <label htmlFor="ajustes-paqueteria" className="block text-[11px] font-bold uppercase tracking-widest text-gray-300">
+              Paquetería
+            </label>
+            <select
+              id="ajustes-paqueteria"
+              value={datos.shipping.provider === 'skydropx' ? 'skydropx' : 'manual'}
+              onChange={cambiar('shipping', 'provider')}
+              className="w-full rounded-sm border border-gray-700 bg-carbon-900 px-3 py-3 text-base text-white focus:border-brand-500 focus:outline-none"
+            >
+              <option value="manual">Manual: se cobra el costo fijo y la guía se compra fuera</option>
+              <option value="skydropx">Skydropx: cotiza por código postal y genera las guías</option>
+            </select>
+            <p className="text-xs leading-relaxed text-gray-400">
+              Con Skydropx, el envío gratis se sigue respetando: la guía se genera con la tarifa real y la absorbe la
+              tienda. Requiere las credenciales en los secretos de Supabase.
+            </p>
+          </div>
+
+          <fieldset className="grid grid-cols-1 gap-4 rounded-sm border border-gray-800 p-3 sm:grid-cols-2">
+            <legend className="px-1 text-[11px] font-bold uppercase tracking-widest text-gray-300">
+              Dirección de origen (desde dónde se envía)
+            </legend>
+            <TextField label="Nombre de quien envía" value={datos.shipping.origin.name} onChange={cambiarOrigen('name')} />
+            <TextField label="Empresa" value={datos.shipping.origin.company} onChange={cambiarOrigen('company')} />
+            <TextField
+              className="sm:col-span-2"
+              label="Calle y número"
+              value={datos.shipping.origin.street}
+              onChange={cambiarOrigen('street')}
+            />
+            <TextField label="Colonia" value={datos.shipping.origin.neighborhood} onChange={cambiarOrigen('neighborhood')} />
+            <TextField label="Ciudad" value={datos.shipping.origin.city} onChange={cambiarOrigen('city')} />
+            <TextField label="Estado" value={datos.shipping.origin.state} onChange={cambiarOrigen('state')} />
+            <TextField
+              label="Código postal"
+              inputMode="numeric"
+              value={datos.shipping.origin.zip}
+              onChange={cambiarOrigen('zip')}
+              hint="Es el que usa la paquetería para cotizar."
+            />
+            <TextField label="Teléfono" type="tel" value={datos.shipping.origin.phone} onChange={cambiarOrigen('phone')} />
+            <TextField label="Correo" type="email" value={datos.shipping.origin.email} onChange={cambiarOrigen('email')} />
+          </fieldset>
         </Bloque>
 
         <Bloque

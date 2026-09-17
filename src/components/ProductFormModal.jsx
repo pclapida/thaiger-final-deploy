@@ -18,6 +18,11 @@ const FORMULARIO_VACIO = {
   is_on_sale: false,
   discount_percent: 15,
   stock: 10,
+  // Peso y medidas del paquete: sólo se usan para cotizar el envío.
+  weight_g: 500,
+  length_cm: 20,
+  width_cm: 15,
+  height_cm: 10,
 };
 
 function formularioDesde(producto) {
@@ -34,6 +39,10 @@ function formularioDesde(producto) {
     is_on_sale: Boolean(producto.is_on_sale),
     discount_percent: producto.discount_percent || 15,
     stock: producto.stock ?? 0,
+    weight_g: producto.weight_g ?? 500,
+    length_cm: producto.length_cm ?? 20,
+    width_cm: producto.width_cm ?? 15,
+    height_cm: producto.height_cm ?? 10,
   };
 }
 
@@ -295,6 +304,48 @@ export default function ProductFormModal({
             error={errorDe('stock')}
             inputClassName="sin-flechas font-bold text-white"
           />
+
+          <fieldset className="grid grid-cols-2 gap-3 rounded-sm border border-gray-800 p-3 sm:grid-cols-4">
+            <legend className="px-1 text-[11px] font-bold uppercase tracking-widest text-gray-400">
+              Paquete (para cotizar el envío)
+            </legend>
+            <TextField
+              label="Peso (g)"
+              type="number"
+              min="1"
+              step="1"
+              value={form.weight_g}
+              onChange={campo('weight_g')}
+              inputClassName="sin-flechas"
+            />
+            <TextField
+              label="Largo (cm)"
+              type="number"
+              min="1"
+              step="1"
+              value={form.length_cm}
+              onChange={campo('length_cm')}
+              inputClassName="sin-flechas"
+            />
+            <TextField
+              label="Ancho (cm)"
+              type="number"
+              min="1"
+              step="1"
+              value={form.width_cm}
+              onChange={campo('width_cm')}
+              inputClassName="sin-flechas"
+            />
+            <TextField
+              label="Alto (cm)"
+              type="number"
+              min="1"
+              step="1"
+              value={form.height_cm}
+              onChange={campo('height_cm')}
+              inputClassName="sin-flechas"
+            />
+          </fieldset>
 
           <TextField
             label="Precio Público"

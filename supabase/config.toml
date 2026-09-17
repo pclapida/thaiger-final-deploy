@@ -1,0 +1,14 @@
+# Configuración del CLI de Supabase para este proyecto.
+#
+# `project_id` es sólo el nombre local; el proyecto real se enlaza con
+# `supabase link --project-ref <ref>` (ver DESPLIEGUE.md).
+project_id = "thaiger"
+
+# Las funciones que reciben llamadas de fuera (Mercado Pago, la propia base de
+# datos) no traen un JWT de Supabase: se desactiva esa comprobación y cada una
+# valida su propia firma o su secreto compartido. Las demás exigen sesión.
+[functions.mp-webhook]
+verify_jwt = false
+
+[functions.notificar-pedido]
+verify_jwt = false

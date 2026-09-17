@@ -2,9 +2,14 @@
 
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-export const ESTADOS_PEDIDO = ['Pago Pendiente', 'En Proceso', 'Enviado', 'Entregado', 'Cancelado'];
+/**
+ * «Pagado» lo pone sólo el servidor cuando la pasarela confirma el cobro
+ * (marcar_pedido_pagado); el panel lo mueve de ahí a «En Proceso» y siguientes.
+ * Con SPEI manual, el admin lo marca al ver la transferencia.
+ */
+export const ESTADOS_PEDIDO = ['Pago Pendiente', 'Pagado', 'En Proceso', 'Enviado', 'Entregado', 'Cancelado'];
 
-const ESTADOS_PENDIENTES = new Set(['Pago Pendiente', 'En Proceso']);
+const ESTADOS_PENDIENTES = new Set(['Pago Pendiente', 'Pagado', 'En Proceso']);
 
 export function buildDashboardMetrics(orders = []) {
   let totalRevenue = 0;

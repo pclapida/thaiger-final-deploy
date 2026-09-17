@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  CreditCard,
+  ExternalLink,
   Heart,
   KeyRound,
   LayoutDashboard,
@@ -28,7 +30,8 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import { auth as authApi, orders as ordersApi, products as productsApi } from '../services/api';
+import { useSettings } from '../context/SettingsContext';
+import { auth as authApi, orders as ordersApi, payments as paymentsApi, products as productsApi } from '../services/api';
 import { formatPrice } from '../lib/pricing';
 import { ESTADOS_PEDIDO } from '../lib/metrics';
 import { sanitizeImageUrl, sanitizeText, validatePassword } from '../lib/security';
@@ -103,6 +106,7 @@ const PESTANAS = [
 
 const ESTILO_ESTADO = {
   'Pago Pendiente': { clases: 'bg-brand-600/15 text-brand-400 border-brand-600/40', icono: Clock },
+  Pagado: { clases: 'bg-emerald-950/40 text-emerald-300 border-emerald-800', icono: CheckCircle2 },
   'En Proceso': { clases: 'bg-brand-600/15 text-brand-400 border-brand-600/40', icono: Box },
   Enviado: { clases: 'bg-sky-950/40 text-sky-300 border-sky-800', icono: Truck },
   Entregado: { clases: 'bg-emerald-950/40 text-emerald-300 border-emerald-800', icono: PackageCheck },
@@ -192,6 +196,22 @@ export default function UserProfile() {
     () => (filtroEstado === 'Todos' ? pedidos : pedidos.filter((pedido) => pedido.status === filtroEstado)),
     [pedidos, filtroEstado]
   );
+
+  const { settings } = useSettings();
+  const conPasarela = settings?.payment?.gateway === 'mercadopago';
+  const [pagando, setPagando] = useState(null);
+
+  /** Retoma un pago de Mercado Pago que quedó a medias. */
+  const pagarPedido = async (pedido) => {
+    setPagando(pedido.id);
+    try {
+      const inicio = await paymentsApi.start(pedido.id);
+      window.location.assign(inicio.init_point);
+    } catch (fallo) {
+      toast.error(fallo?.message || 'No pudimos iniciar el pago.');
+      setPagando(null);
+    }
+  };
 
   const repetirPedido = async (pedido) => {
     setRepitiendo(pedido.id);
@@ -575,8 +595,10 @@ export default function UserProfile() {
                               <span className="text-2xl font-black tracking-tight text-brand-500">
                                 {formatPrice(pedido.total)}
                               </span>
-                              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                                SPEI: {pedido.payment_info?.concepto || 'N/A'}
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                {pedido.payment_provider === 'mercadopago'
+                                  ? `Mercado Pago${pedido.paid_at ? ' · pagado' : ''}`
+                                  : `SPEI: ${pedido.payment_info?.concepto || 'N/A'}`}
                               </p>
                             </div>
                           </div>
@@ -596,6 +618,22 @@ export default function UserProfile() {
                               />
                               {abierto ? 'Ocultar detalle' : 'Ver detalle'}
                             </button>
+
+                            {conPasarela && pedido.status === 'Pago Pendiente' && !pedido.paid_at && (
+                              <button
+                                type="button"
+                                onClick={() => pagarPedido(pedido)}
+                                disabled={pagando === pedido.id}
+                                className="inline-flex min-h-[44px] items-center gap-2 rounded-sm bg-brand-600 px-4 text-xs font-bold uppercase tracking-widest text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
+                              >
+                                {pagando === pedido.id ? (
+                                  <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <CreditCard size={15} aria-hidden="true" />
+                                )}
+                                Pagar ahora
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -644,6 +682,26 @@ export default function UserProfile() {
                                   <dd className="text-brand-500">{formatPrice(pedido.total)}</dd>
                                 </div>
                               </dl>
+
+                              {pedido.shipment?.tracking_number && (
+                                <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-300">
+                                  <Truck size={16} className="text-brand-500" aria-hidden="true" />
+                                  <span>
+                                    {pedido.shipment.carrier || 'Paquetería'} · guía{' '}
+                                    <span className="font-mono font-bold text-white">{pedido.shipment.tracking_number}</span>
+                                  </span>
+                                  {pedido.shipment.tracking_url && (
+                                    <a
+                                      href={pedido.shipment.tracking_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex min-h-[44px] items-center gap-1 text-xs font-bold uppercase tracking-widest text-brand-500 hover:text-white"
+                                    >
+                                      Rastrear <ExternalLink size={12} aria-hidden="true" />
+                                    </a>
+                                  )}
+                                </p>
+                              )}
 
                               {pedido.shipping_info?.address && (
                                 <p className="mt-4 text-xs leading-relaxed text-gray-500">

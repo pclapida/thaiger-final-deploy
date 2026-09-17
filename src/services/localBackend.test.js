@@ -5,8 +5,10 @@ import {
   ensureSeeded,
   maintenance,
   orders,
+  payments,
   products,
   settings,
+  shipping,
   users,
   _resetSeedState,
   DEMO_ADMIN,
@@ -641,6 +643,76 @@ describe('pedidos', () => {
     );
     expect(pedido.subtotal).toBeCloseTo(suma, 2);
     expect(pedido.total).toBeCloseTo(pedido.subtotal + pedido.shipping_cost, 2);
+  });
+});
+
+describe('pasarela y envíos (modo local)', () => {
+  const envio = { fullName: 'Juan Pérez', phone: '5512345678', address: 'Av. Demo 123', city: 'CDMX', zip: '01000' };
+
+  it('la pasarela dice claro que necesita Supabase', async () => {
+    await expect(payments.start('cualquiera')).rejects.toThrow(/Supabase/);
+  });
+
+  it('el pedido registra con qué se va a pagar', async () => {
+    await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
+    const spei = await orders.create({ shippingInfo: envio, paymentInfo: {}, items: [{ product_id: 1, quantity: 1 }] });
+    const mp = await orders.create({
+      shippingInfo: envio,
+      paymentInfo: { provider: 'mercadopago' },
+      items: [{ product_id: 1, quantity: 1 }],
+    });
+
+    expect(spei.payment_provider).toBe('spei');
+    expect(spei.payment_info.method).toBe('SPEI');
+    expect(mp.payment_provider).toBe('mercadopago');
+    expect(mp.payment_info.method).toBe('Mercado Pago');
+    expect(mp.paid_at).toBeNull();
+  });
+
+  it('sin paquetería conectada, la cotización es la tarifa fija de los ajustes', async () => {
+    await entrarComoAdmin();
+    await settings.update({ shipping: { cost: 180 } });
+
+    const cotizacion = await shipping.quote({ zip: '01000', items: [{ product_id: 1, quantity: 2 }] });
+
+    expect(cotizacion.provider).toBe('manual');
+    expect(cotizacion.quote_id).toBeNull();
+    expect(cotizacion.rates).toHaveLength(1);
+    expect(cotizacion.rates[0]).toMatchObject({ id: 'tarifa-fija', amount: 180, currency: 'MXN' });
+  });
+
+  it('cotizar exige un código postal de cinco dígitos y un carrito con algo', async () => {
+    await expect(shipping.quote({ zip: '123', items: [{ product_id: 1, quantity: 1 }] })).rejects.toThrow(/5 dígitos/);
+    await expect(shipping.quote({ zip: '01000', items: [] })).rejects.toThrow(/vacío/);
+  });
+
+  it('sólo el administrador captura la guía, y se sanea', async () => {
+    const cliente = await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
+    const pedido = await orders.create({ shippingInfo: envio, paymentInfo: {}, items: [{ product_id: 1, quantity: 1 }] });
+
+    await expect(shipping.createLabel(pedido.id, { trackingNumber: '7788' })).rejects.toThrow(/administrador/i);
+
+    await entrarComoAdmin();
+    await expect(shipping.createLabel(pedido.id, { trackingNumber: '   ' })).rejects.toThrow(/rastreo/);
+
+    const guia = await shipping.createLabel(pedido.id, {
+      trackingNumber: ' 7788 ',
+      carrier: 'Estafeta',
+      trackingUrl: 'javascript:alert(1)',
+    });
+    expect(guia).toMatchObject({ provider: 'manual', tracking_number: '7788', carrier: 'Estafeta', tracking_url: null });
+
+    const guardado = (await orders.listByUser(cliente.id)).find((o) => o.id === pedido.id);
+    expect(guardado.shipment.tracking_number).toBe('7788');
+  });
+
+  it('el producto guarda peso y medidas, con defectos sensatos', async () => {
+    await entrarComoAdmin();
+    const sinMedidas = await products.create({ name: 'Bote', brand: 'THAIGER LABS', category: 'Salud', price1: 100 });
+    expect(sinMedidas).toMatchObject({ weight_g: 500, length_cm: 20, width_cm: 15, height_cm: 10 });
+
+    const conMedidas = await products.update(sinMedidas.id, { weight_g: '1200', length_cm: 30, width_cm: -5, height_cm: 'x' });
+    expect(conMedidas).toMatchObject({ weight_g: 1200, length_cm: 30, width_cm: 15, height_cm: 10 });
   });
 });
 

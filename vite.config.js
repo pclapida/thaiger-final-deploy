@@ -20,6 +20,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./src/test/setup.js'],
-    include: ['src/**/*.test.{js,jsx}'],
+    // Las Edge Functions corren en Deno, pero su lógica pura (firma de Mercado
+    // Pago, empaquetado, plantillas de correo) se prueba aquí con Node.
+    include: ['src/**/*.test.{js,jsx}', 'supabase/functions/**/*.test.ts'],
   },
 })

@@ -15,7 +15,12 @@ export PATH="/usr/lib/postgresql/16/bin:$PATH"
 psql_() { psql -h 127.0.0.1 -p "$PUERTO" -U postgres "$@"; }
 
 limpiar() {
-  pg_ctl -D "$BASE/data" stop -m immediate >/dev/null 2>&1 || true
+  # El servidor corre como postgres cuando somos root: hay que pararlo igual.
+  if [ "$(id -u)" -eq 0 ]; then
+    su postgres -c "PATH=$PATH pg_ctl -D $BASE/data stop -m immediate" >/dev/null 2>&1 || true
+  else
+    pg_ctl -D "$BASE/data" stop -m immediate >/dev/null 2>&1 || true
+  fi
   rm -rf "$BASE"
 }
 trap limpiar EXIT
@@ -42,10 +47,11 @@ psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/10-datos.sql"
 echo "==> create_order()"
 psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/20-create-order.sql" 2>&1 | sed 's/.*NOTICE:  //'
 
+echo "==> Pagos, cotizaciones de envío y notificaciones"
+psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/25-pagos-envios.sql" 2>&1 | sed 's/.*NOTICE:  //'
+
 echo "==> Seguridad"
-psql_ -q -c "grant usage on schema pruebas to anon, authenticated;
-             grant execute on all functions in schema pruebas to anon, authenticated;
-             insert into storage.buckets (id,name,public) values ('avatars','avatars',true) on conflict do nothing;" >/dev/null
+psql_ -q -c "insert into storage.buckets (id,name,public) values ('avatars','avatars',true) on conflict do nothing;" >/dev/null
 psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/30-seguridad.sql" 2>&1 | grep -v "^ \|^-\|(1 row)\|set_config" | sed 's/.*NOTICE:  //'
 
 echo "==> Paridad con src/lib/pricing.js"

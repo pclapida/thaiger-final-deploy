@@ -30,3 +30,11 @@ begin
     end if;
 end;
 $$;
+
+-- Supabase concede los privilegios de tabla a anon/authenticated y deja que la
+-- RLS decida. Sin esto, las pruebas de seguridad pasarían por el motivo
+-- equivocado ("permiso denegado" en vez de "la política lo rechazó").
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant usage, select on all sequences in schema public to anon, authenticated;
+grant usage on schema pruebas to anon, authenticated;
+grant execute on all functions in schema pruebas to anon, authenticated;

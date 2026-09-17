@@ -47,6 +47,7 @@ const RUTAS_PUBLICAS = [
   ['/forgot-password', /olvidé mi contraseña/i],
   // En modo local la pantalla dice de frente que no hay correo que enviar.
   ['/reset-password', /sin correo en modo local/i],
+  ['/pago/resultado?estado=fallo&pedido=abc', /el pago no se completó/i],
   ['/terms', /^términos y condiciones$/i],
   ['/about', /^quiénes somos$/i],
   ['/wholesale', /^programa de mayoreo$/i],

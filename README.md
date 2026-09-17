@@ -1,5 +1,7 @@
 # Thaiger Supplements
 
+> **¿Vas a ponerla en línea?** Sigue [`DESPLIEGUE.md`](DESPLIEGUE.md): Supabase, Cloudflare Pages, Mercado Pago, correos y guías, paso a paso y en orden.
+
 Tienda en línea de suplementación deportiva: catálogo con filtros, carrito con
 precios escalonados, checkout por transferencia SPEI, cuentas de cliente y un
 panel de administración desde el que se controla todo el sitio.

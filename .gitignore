@@ -32,3 +32,8 @@ download_logos.py
 *.njsproj
 *.sln
 *.sw?
+
+# Secretos de las Edge Functions (ver supabase/.env.example)
+supabase/.env.functions
+supabase/.env
+supabase/.temp

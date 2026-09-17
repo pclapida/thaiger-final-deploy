@@ -205,23 +205,29 @@ Ordenado por lo que más bloquea.
 
 ### Bloqueante para vender
 
+**0. Ya existe pasarela, correos y envíos: falta encenderlos.**
+Mercado Pago (Checkout Pro con confirmación automática por webhook), correos
+transaccionales con Resend y cotización/guías con Skydropx están construidos,
+probados en lo que se puede probar sin credenciales, y documentados paso a paso
+en `DESPLIEGUE.md`. Lo que falta es abrir las cuentas y cargar los secretos.
+
 **1. Los datos bancarios siguen siendo de ejemplo.**
 `BANCO DEMO`, CLABE `000000000000000000`. Se cambian en `/dashboard → Ajustes`.
 *Tip:* desmarca la casilla «datos de ejemplo» al hacerlo; mientras siga marcada,
 el checkout muestra un aviso en rojo. Es intencional: es la última red antes de
 que alguien transfiera a una cuenta que no existe.
 
-**2. Nadie concilia los pagos SPEI.**
-El pedido queda en «Pago Pendiente» y alguien tiene que mirar el banco y cambiar
-el estatus a mano.
-*Tip:* funciona para un volumen bajo. Cuando estorbe, el camino corto es una
-pasarela (Mercado Pago tiene SPEI con confirmación automática en México); el
-largo, un webhook bancario, que casi ningún banco mexicano ofrece a comercios
-pequeños.
+**2. Con SPEI manual, nadie concilia los pagos.**
+El pedido queda en «Pago Pendiente» y alguien tiene que mirar el banco y
+marcarlo «Pagado» a mano (el correo al cliente sale solo).
+*Ya resuelto para Mercado Pago:* el webhook marca el pedido solo, con
+verificación de firma y de monto. Eligen la pasarela en `/dashboard → Ajustes`.
 
-**3. No se envían correos de pedido.**
-Ni confirmación ni aviso de cambio de estatus.
-*Tip:* Resend o una Edge Function de Supabase.
+**3. Correos de pedido: construidos, falta Resend.**
+Confirmación al cliente y aviso al admin en cada pedido; aviso al cliente en
+cada cambio de estatus (con rastreo al marcar «Enviado»). Salen desde un
+disparador de la base, así que no dependen de quién cambie el estatus. Hace
+falta la cuenta de Resend y verificar el dominio (`DESPLIEGUE.md` §8).
 *Ya resuelto:* la **recuperación de contraseña** (`/forgot-password` y
 `/reset-password`, sobre `auth.resetPasswordForEmail`). Responde igual exista o
 no la cuenta, para que el formulario no sirva de directorio. En modo local avisa

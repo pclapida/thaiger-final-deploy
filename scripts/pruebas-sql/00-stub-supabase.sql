@@ -36,3 +36,28 @@ language sql immutable as $$
 $$;
 
 grant usage on schema public, auth, storage to anon, authenticated;
+
+-- Database Webhooks: en Supabase, supabase_functions.http_request() hace un POST
+-- con pg_net. Aquí sólo anotamos la llamada para poder comprobarla.
+create schema if not exists supabase_functions;
+create table supabase_functions.llamadas (
+    id serial primary key,
+    url text,
+    method text,
+    headers jsonb,
+    payload jsonb,
+    created_at timestamptz default now()
+);
+create or replace function supabase_functions.http_request()
+returns trigger
+language plpgsql as $$
+begin
+    insert into supabase_functions.llamadas (url, method, headers, payload)
+    values (
+        tg_argv[0], tg_argv[1], tg_argv[2]::jsonb,
+        jsonb_build_object('type', tg_op, 'table', tg_table_name, 'record', to_jsonb(new), 'old_record', to_jsonb(old))
+    );
+    return null;
+end;
+$$;
+grant usage on schema supabase_functions to service_role;
