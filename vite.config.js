@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: true,
+    port: 5174,
+    // Deja pasar las peticiones que entran por el tunel de Cloudflare.
+    allowedHosts: ['.trycloudflare.com'],
+  },
   plugins: [react()],
   build: {
     // El bundle superaba 1 MB en un solo archivo; se separan las librerias pesadas.
