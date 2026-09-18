@@ -92,7 +92,7 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
 4. **Authentication → URL Configuration**:
    - **Site URL**: `https://www.tu-dominio.mx` (el dominio final, aunque aún no exista).
    - **Redirect URLs**: añade `https://www.tu-dominio.mx/reset-password` y, para
-     probar en local, `http://localhost:5174/reset-password` (el servidor de desarrollo corre en el puerto 5174, ver `vite.config.js``.
+     probar en local, `http://localhost:5174/reset-password` (el servidor de desarrollo corre en el puerto 5174, ver `vite.config.js`).
    Sin esto, el enlace de "olvidé mi contraseña" no vuelve a la tienda.
 5. **Authentication → Emails**: los correos de confirmación y recuperación los
    manda Supabase con su remitente genérico y un límite bajo por hora. Para
