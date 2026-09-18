@@ -341,3 +341,76 @@ Lista corta; el detalle y el orden sugerido están en [`reporte.md`](reporte.md)
 - Datos siempre por `src/services/api.js`, implementando en los dos backends.
 - Reglas de negocio en `src/lib/`, con su prueba. Las páginas sólo pintan.
 - Ejecuta `npm run lint && npm test` antes de dar algo por terminado.
+
+---
+
+## 9. Traspaso (18 de septiembre de 2026) — por dónde seguir
+
+Esta sección es para quien retome el trabajo (persona o asistente) en otro
+entorno. Léela junto con `DESPLIEGUE.md`.
+
+### Estado
+
+- Rama de trabajo fusionada en `main`. Últimos commits: `203c786` (pedido en
+  el servidor, esquema endurecido) y `59e8c84` (Mercado Pago, correos, envíos,
+  guía de despliegue).
+- Verificado en este entorno: `npm run lint` limpio, `npm test` 280/280,
+  `npm run build` OK, `scripts/pruebas-sql/ejecutar.sh` 69 aserciones + paridad
+  de precios en 300 carritos + carrera de inventario sin sobreventa, y el paso
+  de assets del CI.
+- **Nada está desplegado todavía.** No hay proyecto de Supabase, ni cuenta de
+  Mercado Pago, Resend, Cloudflare ni dominio. Todo el código está listo para
+  recibirlos.
+
+### Lo que NO se ha podido verificar (y hay que hacerlo)
+
+1. **Las Edge Functions contra Supabase real.** Están escritas y su lógica pura
+   probada con Vitest, pero nunca se han desplegado ni ejecutado en Deno. El
+   primer `npx supabase functions deploy` puede sacar algún error de tipos o de
+   import: se corrige ahí mismo. Usan `npm:@supabase/supabase-js@2` y
+   `Deno.serve`.
+2. **El adaptador de Skydropx** (`supabase/functions/_shared/envios/skydropx.ts`)
+   sigue la documentación pública sin haberse probado contra la API. Los
+   nombres de campo viven en `armarCotizacion`, `leerTarifas`, `armarEnvio` y
+   `leerGuia`; la lectura busca claves por nombre a cualquier profundidad.
+   Ajustar con la primera respuesta real del sandbox.
+3. **La tienda en un navegador real** (Chrome + un celular). Todo está probado
+   en jsdom, que no pinta.
+
+### Lo que depende de la empresa (bloquea el lanzamiento)
+
+- Catálogo y fotos reales, con peso y medidas por producto.
+- Cuenta bancaria real (`/dashboard → Ajustes`, desmarcar «datos de ejemplo»).
+- Razón social, RFC, domicilio fiscal, aviso de privacidad y plazos reales para
+  **reescribir** `src/pages/Terms.jsx`, `Refunds.jsx` y `AboutUs.jsx`: hoy
+  están redactados como demostración (dicen literalmente que no hay empresa
+  detrás). Son ~38 menciones de "demostración/ejemplo" en 8 archivos.
+- Quitar el `noindex` de `index.html` y el aviso de demostración del banner.
+
+### Orden sugerido para seguir
+
+1. `DESPLIEGUE.md` §1–4: proyecto de Supabase, SQL, admin, catálogo, funciones.
+   Al desplegar las funciones, corregir lo que salga.
+2. §5–6: Cloudflare Pages y dominio. **No Vercel Hobby**: prohíbe uso comercial.
+3. Recorrido en navegador real del flujo tienda → producto → carrito → checkout
+   (SPEI) → perfil → panel. Arreglar lo que se vea.
+4. §7–8: Mercado Pago en modo prueba (tarjetas de prueba) y Resend. Ensayo de
+   punta a punta: el pedido debe pasar solo a «Pagado» y llegar los correos.
+5. Contenido y legal (arriba). Lista previa a abrir: `DESPLIEGUE.md` §11.
+6. Cuando haya credenciales de Skydropx: §9 y ajustar el adaptador.
+7. Pendientes menores que quedaron anotados: meter `scripts/pruebas-sql` al CI
+   con un service container de Postgres; `App.jsx:54` usa `text-gray-600` en
+   texto legible (la regla pide `text-gray-400`); `image.js` no redimensiona
+   GIF; `changePassword` local no rota `session_token`.
+
+### Trampas conocidas de este repo
+
+- **No pases Prettier** a los archivos: el proyecto no lo usa y reformatea
+  todo (ya pasó una vez y hubo que revertir). El estilo se mantiene a mano.
+- Los `.ts` de `supabase/functions` no los lintea ESLint (no hay config para
+  TypeScript); Vitest sí los ejecuta (`supabase/functions/**/*.test.ts`).
+- Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
+  `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
+  Postgres 16 local): la prueba de paridad es la que detecta que se separen.
+- Las cifras de pruebas en este archivo (280 / 17) se actualizan a mano cuando
+  cambian.
