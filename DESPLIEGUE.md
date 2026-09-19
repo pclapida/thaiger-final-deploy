@@ -47,15 +47,18 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
    cercana (**East US** funciona bien para México). Guarda la contraseña de la
    base en el gestor de contraseñas: la vas a necesitar.
 2. Espera a que termine de crearse (1–2 min).
-3. En **Project Settings → API** copia dos cosas:
-   - **Project URL**: `https://xxxxxxxx.supabase.co`
-   - **anon public key** (o *publishable key*, según la versión del panel)
+3. En **Project Settings → API** copia dos cosas (éstas son las del proyecto real,
+   creado el 19/09/2026; son públicas por diseño, viajan en el navegador):
+   - **Project URL**: `https://vylqmwzofiybmohgzwum.supabase.co`
+   - **publishable key**: `sb_publishable_zRjXfz6VHum_xEmNUyeYOw_V9CghhoU`
 
    Lo que hay entre `https://` y `.supabase.co` es el **project ref**
-   (`xxxxxxxx`). Se usa en varios comandos de abajo.
+   (`vylqmwzofiybmohgzwum`). Se usa en varios comandos de abajo.
 
-4. **Nunca** copies la `service_role key` a ningún archivo del front-end ni a
-   Cloudflare. Sólo la usan los scripts de `scripts/` desde tu computadora.
+4. **Nunca** copies la `service_role key` ni la **contraseña de la base** a
+   ningún archivo del repositorio, del front-end ni a Cloudflare. La contraseña
+   vive en un gestor de contraseñas; sólo la pide `supabase link`. La
+   service_role sólo la usan los scripts de `scripts/` desde tu computadora.
 
 ## 2. Supabase: el esquema
 
@@ -90,8 +93,8 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
      real: `SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/upload-supabase.js`
      (la service key sólo aquí, en tu terminal).
 4. **Authentication → URL Configuration**:
-   - **Site URL**: `https://www.tu-dominio.mx` (el dominio final, aunque aún no exista).
-   - **Redirect URLs**: añade `https://www.tu-dominio.mx/reset-password` y, para
+   - **Site URL**: `https://www.thaigersupplements.com` (el dominio final, aunque aún no exista).
+   - **Redirect URLs**: añade `https://www.thaigersupplements.com/reset-password` y, para
      probar en local, `http://localhost:5174/reset-password` (el servidor de desarrollo corre en el puerto 5174, ver `vite.config.js`).
    Sin esto, el enlace de "olvidé mi contraseña" no vuelve a la tienda.
 5. **Authentication → Emails**: los correos de confirmación y recuperación los
@@ -105,7 +108,7 @@ Necesitas Node instalado. El CLI corre con `npx`, no hay que instalar nada más.
 
 ```bash
 npx supabase login                       # abre el navegador, autoriza
-npx supabase link --project-ref xxxxxxxx # el ref del paso 1; pide la contraseña de la base
+npx supabase link --project-ref vylqmwzofiybmohgzwum # el ref del paso 1; pide la contraseña de la base
 
 # Secretos: copia la plantilla, rellénala, súbela.
 cp supabase/.env.example supabase/.env.functions
@@ -120,14 +123,14 @@ npx supabase functions deploy
 (`mp-webhook`, `notificar-pedido`): no hay que tocar nada.
 
 Comprueba en **Edge Functions** del panel que aparecen las cinco. Las URLs
-quedan así: `https://xxxxxxxx.supabase.co/functions/v1/<nombre>`.
+quedan así: `https://vylqmwzofiybmohgzwum.supabase.co/functions/v1/<nombre>`.
 
 Por último, conecta las notificaciones de pedidos (SQL Editor), con el mismo
 secreto que pusiste en `NOTIFY_SECRET`:
 
 ```sql
 select public.configurar_notificaciones(
-    'https://xxxxxxxx.supabase.co/functions/v1/notificar-pedido',
+    'https://vylqmwzofiybmohgzwum.supabase.co/functions/v1/notificar-pedido',
     'el-mismo-valor-de-NOTIFY_SECRET'
 );
 ```
@@ -162,7 +165,7 @@ Las cabeceras de seguridad y las redirecciones ya van en `public/_headers` y
 1. Compra el dominio (`.com.mx` ronda $250 MXN/año; `.com` unos $12 USD).
    Si lo compras en Cloudflare, el DNS ya queda ahí y ahorras un paso.
 2. Cloudflare → tu proyecto de Pages → **Custom domains → Set up a custom
-   domain** → `www.tu-dominio.mx` (y también el dominio pelón, que Cloudflare
+   domain** → `www.thaigersupplements.com` (y también el dominio pelón, que Cloudflare
    redirige). Si el DNS está en Cloudflare, lo configura solo; si no, te dice
    qué registro CNAME crear.
 3. HTTPS sale solo. Espera a que el estado diga **Active**.
@@ -188,7 +191,7 @@ la dirección de origen de envíos. Los pasos que siguen añaden la pasarela.
 3. Dentro de la aplicación, **Credenciales de prueba**: copia el **Access
    Token** de prueba a `MP_ACCESS_TOKEN` en `supabase/.env.functions`.
 4. **Webhooks → Configurar notificaciones** (modo de prueba primero):
-   - URL: `https://xxxxxxxx.supabase.co/functions/v1/mp-webhook`
+   - URL: `https://vylqmwzofiybmohgzwum.supabase.co/functions/v1/mp-webhook`
    - Eventos: marca **Pagos**
    - Guarda. Aparece una **Clave secreta**: cópiala a `MP_WEBHOOK_SECRET`.
    - Usa el botón **Simular** de esa pantalla: en Supabase → Edge Functions →
@@ -217,11 +220,11 @@ de marcarse como pagado.
 
 ## 8. Resend: los correos
 
-1. Cuenta en resend.com → **Domains → Add domain** → `tu-dominio.mx`.
+1. Cuenta en resend.com → **Domains → Add domain** → `thaigersupplements.com`.
 2. Te da 3–4 registros DNS (TXT/MX/CNAME). Crea cada uno en **Cloudflare →
    DNS**. Vuelve a Resend y pulsa **Verify**; puede tardar unos minutos.
 3. **API Keys → Create** → cópiala a `RESEND_API_KEY`. Pon `MAIL_FROM` con el
-   dominio verificado (`Thaiger Supplements <pedidos@tu-dominio.mx>`) y
+   dominio verificado (`Thaiger Supplements <pedidos@thaigersupplements.com>`) y
    `NOTIFY_ADMIN_EMAIL` con el correo al que quieran que llegue cada pedido.
 4. `npx supabase secrets set --env-file supabase/.env.functions`
 5. Haz un pedido de prueba: deben llegar dos correos (al cliente y al admin).

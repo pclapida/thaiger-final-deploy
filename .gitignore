@@ -37,3 +37,9 @@ download_logos.py
 supabase/.env.functions
 supabase/.env
 supabase/.temp
+
+# Archivos de contraseñas: jamás al repositorio (ver DESPLIEGUE.md §1)
+contraseñas.md
+contrasenas.md
+passwords.md
+secretos.md
