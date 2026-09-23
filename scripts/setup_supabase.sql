@@ -57,6 +57,12 @@ create policy "Admins eliminan perfiles" on public.users
 
 -- Un usuario no debe poder ascenderse a administrador editando su propio
 -- perfil: este disparador conserva el rol salvo que quien edita ya sea admin.
+--
+-- Sólo vigila a quien llega con sesión de usuario (auth.uid() no nulo). El SQL
+-- Editor del panel, la service_role y los scripts corren sin usuario, y ésos
+-- son justo los caminos legítimos para nombrar al primer administrador. La
+-- primera versión los bloqueaba también: el `update ... set role = 'admin'`
+-- de DESPLIEGUE.md respondía «Success» sin cambiar nada.
 create or replace function public.proteger_rol()
 returns trigger
 language plpgsql
@@ -64,7 +70,9 @@ security definer
 set search_path = public
 as $$
 begin
-    if new.role is distinct from old.role and not public.is_admin() then
+    if new.role is distinct from old.role
+       and auth.uid() is not null
+       and not public.is_admin() then
         new.role := old.role;
     end if;
     return new;
@@ -75,6 +83,48 @@ drop trigger if exists proteger_rol on public.users;
 create trigger proteger_rol
     before update on public.users
     for each row execute function public.proteger_rol();
+
+-- El perfil de public.users nace con la cuenta, en la base.
+--
+-- La primera versión lo creaba desde el navegador justo después del registro.
+-- Con la confirmación de correo activada (lo normal en Supabase), el registro
+-- no devuelve sesión, así que ese insert corría como anónimo, la RLS lo
+-- rechazaba en silencio y la cuenta quedaba sin perfil: sin nombre, sin rol y
+-- fuera de Dashboard → Usuarios. Un disparador sobre auth.users no depende de
+-- quién esté conectado.
+create or replace function public.crear_perfil_de_usuario()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+    insert into public.users (id, email, name, role)
+    values (
+        new.id,
+        new.email,
+        left(coalesce(nullif(btrim(new.raw_user_meta_data->>'name'), ''), 'Usuario Thaiger'), 60),
+        'user'
+    )
+    on conflict (id) do nothing;
+    return new;
+end;
+$$;
+
+drop trigger if exists crear_perfil_de_usuario on auth.users;
+create trigger crear_perfil_de_usuario
+    after insert on auth.users
+    for each row execute function public.crear_perfil_de_usuario();
+
+-- Las cuentas creadas antes de que existiera el disparador se quedan sin
+-- perfil: se les crea ahora. Idempotente, no toca las que ya lo tienen.
+insert into public.users (id, email, name, role)
+select u.id,
+       u.email,
+       left(coalesce(nullif(btrim(u.raw_user_meta_data->>'name'), ''), 'Usuario Thaiger'), 60),
+       'user'
+  from auth.users u
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------- PRODUCTOS
 create table if not exists public.products (

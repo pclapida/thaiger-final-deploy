@@ -289,7 +289,12 @@ Lo que está resuelto:
   `marcar_pedido_pagado()`, que exige que el monto coincida con el total. Esa
   función es la **única** forma de poner `paid_at`; sólo la ejecuta la service_role.
 - **Notificaciones de la base** con secreto compartido (`x-thaiger-secret`).
-- **RLS en Supabase** con un disparador que impide auto-ascenderse a admin.
+- **RLS en Supabase** con un disparador (`proteger_rol`) que impide que un
+  usuario con sesión se ascienda a admin. No aplica sin sesión (SQL Editor,
+  service_role): es el camino para nombrar al primer administrador.
+- **Perfiles**: `public.users` se llena con el disparador `crear_perfil_de_usuario`
+  sobre `auth.users`, no desde el navegador (con confirmación de correo no hay
+  sesión al registrarse y la RLS rechazaba el insert).
 - **Storage por rol**: las fotos de producto sólo las escribe un admin; el avatar,
   cada quien dentro de su propia carpeta (`avatars/<uid>/`).
 

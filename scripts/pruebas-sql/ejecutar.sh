@@ -44,6 +44,9 @@ psql_ -v ON_ERROR_STOP=1 -q -f "$RAIZ/scripts/setup_supabase.sql" 2>&1 | grep -i
 psql_ -q -c "create schema if not exists pruebas;"
 psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/10-datos.sql"
 
+echo "==> Perfiles y roles"
+psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/15-perfiles.sql" 2>&1 | sed 's/.*NOTICE:  //'
+
 echo "==> create_order()"
 psql_ -v ON_ERROR_STOP=1 -q -f "$AQUI/20-create-order.sql" 2>&1 | sed 's/.*NOTICE:  //'
 

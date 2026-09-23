@@ -345,15 +345,10 @@ export const auth = {
       })
     );
 
-    if (data.user) {
-      const { error: perfilError } = await supabase.from('users').upsert({
-        id: data.user.id,
-        email: data.user.email,
-        name: limpio,
-        role: 'user',
-      });
-      if (perfilError) console.error('No se pudo guardar el perfil en public.users:', perfilError.message);
-    }
+    // El perfil de public.users lo crea el disparador crear_perfil_de_usuario
+    // al nacer la cuenta, con el nombre de `options.data.name`. Hacerlo desde
+    // aquí fallaba en silencio con la confirmación de correo activada: no hay
+    // sesión todavía y la RLS rechaza el insert.
 
     return toAppUser(data.session);
   },

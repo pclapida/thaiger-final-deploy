@@ -6,9 +6,12 @@ insert into auth.users (id, email) values
     ('11111111-1111-1111-1111-111111111111', 'cliente@thaiger.mx'),
     ('22222222-2222-2222-2222-222222222222', 'admin@thaiger.mx');
 
+-- Los perfiles ya los creó el disparador al insertar en auth.users; aquí sólo
+-- se les da nombre y se nombra al admin (sin sesión, como el SQL Editor).
 insert into public.users (id, email, name, role) values
     ('11111111-1111-1111-1111-111111111111', 'cliente@thaiger.mx', 'Cliente', 'user'),
-    ('22222222-2222-2222-2222-222222222222', 'admin@thaiger.mx', 'Admin', 'admin');
+    ('22222222-2222-2222-2222-222222222222', 'admin@thaiger.mx', 'Admin', 'admin')
+on conflict (id) do update set name = excluded.name, role = excluded.role;
 
 insert into public.products (id, name, brand, category, price1, price2, price3, stock, is_on_sale, discount_percent) values
     (1, 'Proteína', 'THAIGER LABS', 'Proteínas', 1000, 900, 800, 10, false, 0),

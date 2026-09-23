@@ -85,6 +85,9 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
    ```sql
    update public.users set role = 'admin' where email = 'tu@correo.mx';
    ```
+   Debe decir **1 row affected**. Si dice 0, la cuenta no tiene perfil:
+   vuelve a ejecutar `scripts/setup_supabase.sql` completo (crea los perfiles
+   que falten) y repite el `update`.
 3. Carga el catálogo. Dos caminos:
    - **A mano** desde `/dashboard → Productos` (es lo normal con pocas decenas
      de productos; ahí capturas foto, precios, stock, y peso y medidas para el
