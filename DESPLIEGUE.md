@@ -165,16 +165,23 @@ Las cabeceras de seguridad y las redirecciones ya van en `public/_headers` y
 
 ## 6. Dominio
 
-1. Compra el dominio (`.com.mx` ronda $250 MXN/año; `.com` unos $12 USD).
-   Si lo compras en Cloudflare, el DNS ya queda ahí y ahorras un paso.
+1. `thaigersupplements.com` está registrado en **Alibaba Cloud**, pero el DNS
+   lo administra **Cloudflare**: en Cloudflare → *Add a domain* (plan Free) te
+   da dos nameservers, y en Alibaba → *Domains → Domain List → Manage → DNS
+   Modify* se ponen esos dos en lugar de los de Alibaba. Cuando Cloudflare dice
+   **Active**, el dominio ya responde desde ahí.
 2. Cloudflare → tu proyecto de Pages → **Custom domains → Set up a custom
-   domain** → `www.thaigersupplements.com` (y también el dominio pelón, que Cloudflare
-   redirige). Si el DNS está en Cloudflare, lo configura solo; si no, te dice
-   qué registro CNAME crear.
-3. HTTPS sale solo. Espera a que el estado diga **Active**.
-4. Vuelve a **Supabase → Authentication → URL Configuration** y confirma que
+   domain** → `www.thaigersupplements.com`. Repite con `thaigersupplements.com`
+   (sin `www`). Con el DNS en Cloudflare, crea los registros solo.
+3. **Redirige el dominio sin `www` hacia el que lo lleva**: *Rules → Redirect
+   Rules → Create rule → plantilla "Redirect from Root to WWW"* (301, conservar
+   ruta y parámetros). No es cosmético: las Edge Functions sólo aceptan
+   llamadas desde `SITE_URL` (`https://www.thaigersupplements.com`); quien
+   entrara sin `www` vería fallar el pago y la cotización por CORS.
+4. HTTPS sale solo. Espera a que el estado diga **Active**.
+5. Vuelve a **Supabase → Authentication → URL Configuration** y confirma que
    Site URL y las Redirect URLs llevan el dominio real.
-5. Actualiza `SITE_URL` en `supabase/.env.functions`, y vuelve a subir los
+6. Actualiza `SITE_URL` en `supabase/.env.functions`, y vuelve a subir los
    secretos (`npx supabase secrets set --env-file ...`).
 
 **Ya puedes vender con SPEI manual.** Entra a `/dashboard → Ajustes`, pon la
