@@ -4,6 +4,9 @@ import { auth } from '../services/api';
 
 const AuthContext = createContext(null);
 
+/** Cuánto se espera a recuperar la sesión antes de abrir la tienda sin ella. */
+export const ESPERA_MAXIMA_SESION_MS = 8000;
+
 /** Pantalla mientras se recupera la sesión: la marca, no un texto pelado. */
 function PantallaInicial() {
   return (
@@ -23,6 +26,16 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let active = true;
 
+    // Red de seguridad: si recuperar la sesión no responde nunca (un bloqueo
+    // del cliente de Supabase, una red que no contesta), la tienda no puede
+    // quedarse para siempre en «Cargando». Pasado el plazo se abre como
+    // visitante; si la sesión llega después, onAuthStateChange la aplica.
+    const plazo = setTimeout(() => {
+      if (!active) return;
+      console.error('La sesión tardó demasiado en recuperarse; se abre la tienda sin sesión.');
+      setLoading(false);
+    }, ESPERA_MAXIMA_SESION_MS);
+
     auth
       .getSession()
       .then((session) => {
@@ -32,6 +45,7 @@ export const AuthProvider = ({ children }) => {
         console.error('No se pudo recuperar la sesión:', error);
       })
       .finally(() => {
+        clearTimeout(plazo);
         if (active) setLoading(false);
       });
 
@@ -41,6 +55,7 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       active = false;
+      clearTimeout(plazo);
       unsubscribe?.();
     };
   }, []);

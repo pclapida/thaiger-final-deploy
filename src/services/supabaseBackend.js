@@ -319,8 +319,27 @@ export const auth = {
   },
 
   onAuthStateChange(callback) {
-    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      callback(await toAppUser(session));
+    // Este callback NO puede ser async ni llamar a Supabase directamente.
+    // supabase-js lo ejecuta dentro de su cerrojo de sesión; toAppUser() hace
+    // una consulta que necesita ese mismo cerrojo y se quedaba esperando para
+    // siempre. Se notaba al volver a la tienda con una sesión de horas antes:
+    // la renovación del token disparaba el aviso, la consulta se bloqueaba, y
+    // con ella getSession(), así que «Cargando Thaiger» no terminaba nunca.
+    // Por eso el trabajo se difiere con setTimeout, como pide la librería.
+    //
+    // Las consultas pueden resolver en otro orden que los avisos (un
+    // SIGNED_OUT responde al instante; un SIGNED_IN anterior aún consulta el
+    // perfil): sólo se entrega el resultado del aviso más reciente.
+    let ultimo = 0;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const turno = ++ultimo;
+      setTimeout(() => {
+        toAppUser(session)
+          .then((usuario) => {
+            if (turno === ultimo) callback(usuario);
+          })
+          .catch((error) => console.error('No se pudo leer el perfil de la sesión:', error));
+      }, 0);
     });
     return () => data.subscription.unsubscribe();
   },

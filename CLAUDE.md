@@ -219,7 +219,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (281 pruebas, 17 archivos)
+npm test             # suite completa (285 pruebas, 19 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -417,5 +417,12 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (280 / 17) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (285 / 19) se actualizan a mano cuando
   cambian.
+- **Nunca uses `async` ni llames a Supabase dentro de
+  `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de
+  su cerrojo de sesión, y cualquier consulta que espere ahí se bloquea para
+  siempre. Pasó en producción: al volver con una sesión de horas antes, la
+  renovación del token disparaba el aviso y la tienda se quedaba en «Cargando
+  Thaiger». El patrón correcto (diferir con `setTimeout`) está en
+  `supabaseBackend.auth.onAuthStateChange`, cubierto por `supabaseBackend.test.js`.
