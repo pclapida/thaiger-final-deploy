@@ -156,8 +156,11 @@ select public.configurar_notificaciones(
    Si sigue diciendo modo local, las variables no llegaron: revísalas y vuelve
    a desplegar.
 
-Las cabeceras de seguridad y las redirecciones ya van en `public/_headers` y
-`public/_redirects`; no hay que configurar nada más.
+Las cabeceras de seguridad ya van en `public/_headers`; no hay que configurar
+nada más. Tampoco hace falta una regla para que `/login` o `/dashboard` abran
+la app: sin un `404.html`, Pages sirve `index.html` en cualquier ruta. (Había un
+`_redirects` heredado de Netlify con `/* /index.html 200`; Pages lo rechazaba
+por bucle infinito y se quitó.)
 
 > **No uses Vercel gratis para esto.** Su plan Hobby prohíbe el uso comercial
 > (tiendas, cobros). `vercel.json` se conserva sólo por si algún día contratan
