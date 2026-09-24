@@ -219,7 +219,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (280 pruebas, 17 archivos)
+npm test             # suite completa (281 pruebas, 17 archivos)
 npm run test:watch
 npm run lint
 npm run build

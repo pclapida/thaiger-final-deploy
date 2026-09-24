@@ -9,6 +9,15 @@ function firmar(dataId: string, requestId: string, ts: string) {
   return createHmac('sha256', SECRETO).update(manifiestoFirma({ dataId, requestId, ts })).digest('hex');
 }
 
+/**
+ * Cambia el primer carácter de la firma por uno que seguro es distinto.
+ * Sustituirlo siempre por 'f' no manipulaba nada cuando la firma real ya
+ * empezaba por 'f' (1 de cada 16 horas), y la prueba fallaba al azar en CI.
+ */
+function manipular(firma: string) {
+  return (firma[0] === 'f' ? '0' : 'f') + firma.slice(1);
+}
+
 describe('firma de las notificaciones', () => {
   it('arma el manifiesto con el formato que documenta Mercado Pago', () => {
     expect(manifiestoFirma({ dataId: '123456', requestId: 'req-1', ts: '1700000000000' })).toBe(
@@ -51,13 +60,25 @@ describe('firma de las notificaciones', () => {
     const v1 = firmar('555', 'req-9', ts);
     const base = { xRequestId: 'req-9', dataId: '555', secreto: SECRETO, ahoraMs: ahora };
 
-    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1.replace(/^./, 'f')}` })).toBe(false);
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${manipular(v1)}` })).toBe(false);
     expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}`, secreto: 'otra' })).toBe(false);
     // El atacante cambia el id del pago por uno que sí está aprobado.
     expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}`, dataId: '556' })).toBe(false);
     // Una notificación capturada hace una hora y repetida.
     expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}`, ahoraMs: ahora + 60 * 60 * 1000 })).toBe(false);
     expect(await firmaValida({ ...base, xSignature: null })).toBe(false);
+  });
+
+  it('rechaza la manipulación aunque la firma real empiece por "f"', async () => {
+    // Hora fija cuya firma empieza por 'f': el caso que antes pasaba al azar.
+    const ahora = 1_700_000_000_032;
+    const ts = String(ahora);
+    const v1 = firmar('555', 'req-9', ts);
+    expect(v1.startsWith('f')).toBe(true);
+
+    const base = { xRequestId: 'req-9', dataId: '555', secreto: SECRETO, ahoraMs: ahora };
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}` })).toBe(true);
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${manipular(v1)}` })).toBe(false);
   });
 });
 
