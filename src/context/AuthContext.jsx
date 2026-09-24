@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { auth } from '../services/api';
+import { puedeEditarCatalogo } from '../lib/roles';
 
 const AuthContext = createContext(null);
 
@@ -116,6 +117,8 @@ export const AuthProvider = ({ children }) => {
       loading,
       isAuthenticated: Boolean(user),
       isAdmin: user?.role === 'admin',
+      // Admin o cuenta de catálogo: entra al panel y edita productos.
+      canManageCatalog: puedeEditarCatalogo(user?.role),
       login,
       register,
       logout,

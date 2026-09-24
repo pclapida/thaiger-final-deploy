@@ -88,6 +88,13 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
    Debe decir **1 row affected**. Si dice 0, la cuenta no tiene perfil:
    vuelve a ejecutar `scripts/setup_supabase.sql` completo (crea los perfiles
    que falten) y repite el `update`.
+   **Cuentas del equipo.** Supabase → **Authentication → Users → Add user →
+   Create new user**, con «Auto Confirm User» marcado. Luego, en
+   `/dashboard → Usuarios`, dale el rol:
+   - **Administrador**: todo el panel.
+   - **Catálogo**: sólo la pestaña Productos (alta, edición, fotos, stock). No
+     ve pedidos, cuentas ni ajustes, y la base se lo impide aunque lo intente
+     por fuera del panel.
 3. Carga el catálogo. Dos caminos:
    - **A mano** desde `/dashboard → Productos` (es lo normal con pocas decenas
      de productos; ahí capturas foto, precios, stock, y peso y medidas para el
@@ -300,9 +307,8 @@ siguiente request; no hay que volver a desplegar.
 
 - [ ] `/dashboard → Ajustes`: contacto, cuenta SPEI real y **"datos de ejemplo" desmarcado**, pasarela elegida, dirección de origen.
 - [ ] Catálogo real con fotos, stock, peso y medidas. Ni un producto de demostración.
-- [ ] Quitar el aviso de demostración del banner (Ajustes → Aviso).
-- [ ] Términos, Devoluciones y Quiénes somos con la razón social, RFC, domicilio fiscal, aviso de privacidad y plazos reales. Hoy están redactados como demo (`src/pages/Terms.jsx`, `Refunds.jsx`, `AboutUs.jsx`).
-- [ ] Quitar `<meta name="robots" content="noindex, nofollow">` de `index.html`.
+- [ ] `/dashboard → Ajustes → Datos legales`: razón social, RFC y domicilio. Salen en Términos, Aviso de privacidad y Devoluciones.
+- [ ] Que un abogado revise los textos legales (`src/pages/Terms.jsx`, `Privacidad.jsx`, `Refunds.jsx`, `Envios.jsx`): son una base para comercio electrónico en México, no asesoría. Revisar sobre todo los plazos (72 h para pagar, 48 h para reportar daños, 1–2 días de preparación).
 - [ ] Mercado Pago en **producción** (credenciales y webhook de producción), no en prueba.
 - [ ] Compra real de $50 hecha por ustedes: pedido → pago → correo → «Pagado» solo → guía → «Enviado» → correo con rastreo.
 - [ ] Recuperación de contraseña probada con un correo real.

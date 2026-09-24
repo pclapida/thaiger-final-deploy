@@ -62,7 +62,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const reducido = useReducedMotion();
 
-  const { user, isAuthenticated, isAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isAdmin, canManageCatalog, logout } = useAuth();
   const { cartItems } = useCart();
   const { settings } = useSettings();
 
@@ -215,7 +215,9 @@ export default function Navbar() {
   }, [menuUsuario]);
 
   // ------------------------------------------------------------------ datos
-  const enlaces = isAdmin ? [...ENLACES, { to: '/dashboard', etiqueta: 'Admin', admin: true }] : ENLACES;
+  const enlaces = canManageCatalog
+    ? [...ENLACES, { to: '/dashboard', etiqueta: isAdmin ? 'Admin' : 'Catálogo', admin: true }]
+    : ENLACES;
   const unidades = cartItems.reduce((total, articulo) => total + (Number(articulo.quantity) || 0), 0);
   const avatar = sanitizeImageUrl(user?.avatar_url);
   const nombreCorto = (user?.name || user?.email || '').split(' ')[0] || 'Mi cuenta';
@@ -419,12 +421,12 @@ export default function Navbar() {
                         >
                           <Package size={16} aria-hidden="true" /> Mis pedidos
                         </Link>
-                        {isAdmin && (
+                        {canManageCatalog && (
                           <Link
                             to="/dashboard"
                             className="flex min-h-11 items-center gap-3 px-4 text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-brand-500"
                           >
-                            <Shield size={16} aria-hidden="true" /> Panel de administración
+                            <Shield size={16} aria-hidden="true" /> {isAdmin ? 'Panel de administración' : 'Panel de catálogo'}
                           </Link>
                         )}
                         <button

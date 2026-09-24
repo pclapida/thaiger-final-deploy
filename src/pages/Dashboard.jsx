@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import useDocumentTitle from '../hooks/useDocumentTitle';
+import { useAuth } from '../context/AuthContext';
 import { products as productosApi, orders as pedidosApi, BACKEND_MODE, IS_LOCAL_MODE } from '../services/api';
 import PanelResumen from '../components/dashboard/PanelResumen';
 import PanelProductos from '../components/dashboard/PanelProductos';
@@ -22,10 +23,14 @@ import PanelCarrusel from '../components/dashboard/PanelCarrusel';
 import PanelAjustes from '../components/dashboard/PanelAjustes';
 import PanelDatos from '../components/dashboard/PanelDatos';
 
-/** Pestañas del panel. El `id` es el que viaja en la URL (`?tab=productos`). */
+/**
+ * Pestañas del panel. El `id` es el que viaja en la URL (`?tab=productos`).
+ * `catalogo: true` marca las que también ve una cuenta de catálogo; el resto
+ * son sólo de administración (y la RLS de Supabase las rechaza igual).
+ */
 const PESTANAS = [
   { id: 'resumen', etiqueta: 'Resumen', icono: LayoutDashboard },
-  { id: 'productos', etiqueta: 'Productos', icono: Package },
+  { id: 'productos', etiqueta: 'Productos', icono: Package, catalogo: true },
   { id: 'pedidos', etiqueta: 'Pedidos', icono: ClipboardList },
   { id: 'usuarios', etiqueta: 'Usuarios', icono: Users },
   { id: 'carrusel', etiqueta: 'Carrusel', icono: Images },
@@ -62,9 +67,13 @@ function BotonPestana({ pestana, activa, onSeleccionar, compacto = false }) {
 export default function Dashboard() {
   useDocumentTitle('Panel de administración', 'Inventario, pedidos, usuarios y configuración de la tienda.');
 
+  const { isAdmin } = useAuth();
+  const pestanas = useMemo(() => (isAdmin ? PESTANAS : PESTANAS.filter((p) => p.catalogo)), [isAdmin]);
+  const pestanaInicial = pestanas[0].id;
+
   const [searchParams, setSearchParams] = useSearchParams();
   const solicitada = searchParams.get('tab');
-  const pestanaActiva = PESTANAS.some((p) => p.id === solicitada) ? solicitada : 'resumen';
+  const pestanaActiva = pestanas.some((p) => p.id === solicitada) ? solicitada : pestanaInicial;
 
   const [productos, setProductos] = useState([]);
   const [cargandoProductos, setCargandoProductos] = useState(true);
@@ -108,10 +117,11 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Una cuenta de catálogo no ve pedidos: ni se piden.
   useEffect(() => {
     cargarProductos();
-    cargarPedidos();
-  }, [cargarProductos, cargarPedidos]);
+    if (isAdmin) cargarPedidos();
+  }, [cargarProductos, cargarPedidos, isAdmin]);
 
   /** Recarga desde un botón: aquí sí se muestra el estado de carga. */
   const recargarProductos = useCallback(() => {
@@ -126,19 +136,19 @@ export default function Dashboard() {
 
   const recargarTodo = useCallback(() => {
     recargarProductos();
-    recargarPedidos();
-  }, [recargarProductos, recargarPedidos]);
+    if (isAdmin) recargarPedidos();
+  }, [recargarProductos, recargarPedidos, isAdmin]);
 
   // ------------------------------------------------------------- navegación
 
   const irAPestana = useCallback(
     (id) => {
       const siguiente = new URLSearchParams(searchParams);
-      if (id === 'resumen') siguiente.delete('tab');
+      if (id === pestanaInicial) siguiente.delete('tab');
       else siguiente.set('tab', id);
       setSearchParams(siguiente, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [searchParams, setSearchParams, pestanaInicial]
   );
 
   const editarProducto = useCallback(
@@ -161,7 +171,7 @@ export default function Dashboard() {
     [productos]
   );
 
-  const pestanaActual = PESTANAS.find((p) => p.id === pestanaActiva) || PESTANAS[0];
+  const pestanaActual = pestanas.find((p) => p.id === pestanaActiva) || pestanas[0];
 
   return (
     <div className="min-h-screen bg-carbon-900 font-sans text-white">
@@ -172,13 +182,13 @@ export default function Dashboard() {
         <aside className="no-imprimir sticky top-[var(--alto-cabecera,5rem)] hidden h-[calc(100vh-var(--alto-cabecera,5rem))] w-64 shrink-0 overflow-y-auto border-r border-gray-800 bg-carbon-800 p-6 custom-scrollbar lg:block">
           <div className="mb-8">
             <p className="flex items-center gap-2 text-xl font-extrabold uppercase tracking-widest text-brand-500">
-              <HardDrive size={20} aria-hidden="true" /> Admin
+              <HardDrive size={20} aria-hidden="true" /> {isAdmin ? 'Admin' : 'Catálogo'}
             </p>
             <p className="mt-1 text-xs text-gray-400">Thaiger Supplements</p>
           </div>
 
           <nav aria-label="Secciones del panel" className="space-y-2">
-            {PESTANAS.map((pestana) => (
+            {pestanas.map((pestana) => (
               <BotonPestana
                 key={pestana.id}
                 pestana={pestana}
@@ -211,7 +221,7 @@ export default function Dashboard() {
           {/* Tira de pestañas desplazable en móvil */}
           <div className="no-imprimir -mx-4 mb-6 overflow-x-auto px-4 pb-1 custom-scrollbar lg:hidden">
             <nav aria-label="Secciones del panel" className="flex gap-2">
-              {PESTANAS.map((pestana) => (
+              {pestanas.map((pestana) => (
                 <BotonPestana
                   key={pestana.id}
                   pestana={pestana}
@@ -225,7 +235,7 @@ export default function Dashboard() {
 
           <div className="no-imprimir mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">
-              Panel de administración · {pestanaActual.etiqueta} ·{' '}
+              {isAdmin ? 'Panel de administración' : 'Panel de catálogo'} · {pestanaActual.etiqueta} ·{' '}
               <span className="text-brand-500">{BACKEND_MODE === 'local' ? 'datos locales' : 'Supabase'}</span>
             </p>
 

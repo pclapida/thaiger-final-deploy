@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Dashboard from './Dashboard';
-import { products, settings, users } from '../services/localBackend';
+import { auth, products, settings, users } from '../services/localBackend';
 import { SEED_PRODUCTS } from '../data/seed';
 import { entrarComoAdmin, makeImageFile, renderWithProviders, resetApp } from '../test/utils';
 
@@ -226,5 +226,27 @@ describe('panel: carrusel', () => {
 
     // Los cuatro slides sembrados en src/data/settings.js.
     expect(await screen.findAllByDisplayValue(/THAIGER LABS|IRON PEAK|VOLT SUPPS|PURE CORE/)).toBeTruthy();
+  });
+});
+
+describe('panel para una cuenta de catálogo', () => {
+  beforeEach(async () => {
+    await users.create({ email: 'catalogo@thaiger.mx', password: 'catalogo123', name: 'Catálogo', role: 'catalogo' });
+    await auth.signOut();
+    await auth.signIn('catalogo@thaiger.mx', 'catalogo123');
+  });
+
+  it('abre directo en productos y no muestra las pestañas de administración', async () => {
+    renderWithProviders(<Dashboard />);
+
+    expect(await screen.findByRole('heading', { name: /gestor de inventario/i })).toBeInTheDocument();
+    for (const pestana of [/resumen/i, /pedidos/i, /usuarios/i, /ajustes/i, /datos/i, /carrusel/i]) {
+      expect(screen.queryByRole('button', { name: pestana })).toBeNull();
+    }
+  });
+
+  it('aunque pida otra pestaña por la URL, se queda en productos', async () => {
+    renderWithProviders(<Dashboard />, { route: '/dashboard?tab=ajustes' });
+    expect(await screen.findByRole('heading', { name: /gestor de inventario/i })).toBeInTheDocument();
   });
 });

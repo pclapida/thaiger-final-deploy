@@ -26,6 +26,7 @@ import {
 } from '../data/seed';
 import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data/settings';
 import { fileToOptimizedDataUrl } from '../lib/image';
+import { normalizarRol, puedeEditarCatalogo } from '../lib/roles';
 import { computeCartTotals, configurePricing, getUnitPrice, roundMoney } from '../lib/pricing';
 import {
   clearLoginFailures,
@@ -205,6 +206,14 @@ async function requireAdmin() {
   return user;
 }
 
+/** Productos y sus fotos: admin o cuenta de catálogo. */
+async function requireCatalogo() {
+  const user = await currentUser();
+  if (!user) throw new Error('Necesitas iniciar sesión para hacer esto.');
+  if (!puedeEditarCatalogo(user.role)) throw new Error('Tu cuenta no puede modificar el catálogo.');
+  return user;
+}
+
 async function requireSession() {
   const user = await currentUser();
   if (!user) throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
@@ -276,7 +285,7 @@ export const products = {
 
   async create(data) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     const all = await idb.getAll('products');
     const nextId = all.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0) + 1;
@@ -292,7 +301,7 @@ export const products = {
 
   async update(id, patch) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     const current = await products.get(id);
     if (!current) throw new Error('El producto ya no existe.');
@@ -307,7 +316,7 @@ export const products = {
 
   async remove(id) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     const current = await products.get(id);
     if (current) await idb.remove('products', current.id);
@@ -316,7 +325,7 @@ export const products = {
   /** Aplica el mismo cambio a varios productos (acciones masivas del panel). */
   async bulkUpdate(ids, patch) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     const all = await idb.getAll('products');
     const objetivo = new Set(ids.map(String));
@@ -335,7 +344,7 @@ export const products = {
 
   async bulkRemove(ids) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     for (const id of ids) await idb.remove('products', Number(id));
     return ids.length;
@@ -347,7 +356,7 @@ export const products = {
    */
   async renameGroup(campo, desde, hacia) {
     await ensureSeeded();
-    await requireAdmin();
+    await requireCatalogo();
 
     if (campo !== 'brand' && campo !== 'category') throw new Error('Sólo se puede renombrar marca o categoría.');
     const destino = sanitizeText(hacia, { maxLength: 60 });
@@ -814,7 +823,7 @@ export const users = {
       id: randomId(),
       email: normalizeEmail(email),
       name: sanitizeText(name, { maxLength: 60 }) || 'Usuario Thaiger',
-      role: role === 'admin' ? 'admin' : 'user',
+      role: normalizarRol(role),
       avatar_url: null,
       created_at: new Date().toISOString(),
       ...(await createPasswordRecord(password)),
@@ -831,7 +840,7 @@ export const users = {
     const user = await idb.get('users', userId);
     if (!user) throw new Error('La cuenta ya no existe.');
 
-    const siguiente = role === 'admin' ? 'admin' : 'user';
+    const siguiente = normalizarRol(role);
 
     // Nadie puede quitarse a sí mismo el último acceso al panel.
     if (user.id === admin.id && siguiente !== 'admin') {

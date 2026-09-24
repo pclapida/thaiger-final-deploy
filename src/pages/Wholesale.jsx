@@ -6,7 +6,6 @@ import {
   Boxes,
   ChevronDown,
   Clock,
-  Info,
   Mail,
   Percent,
   Phone,
@@ -187,19 +186,6 @@ export default function Wholesale() {
           </div>
         </motion.header>
 
-        <div
-          role="note"
-          className="mt-8 flex max-w-3xl items-start gap-3 rounded-xl border border-brand-600/40 bg-brand-600/10 p-4 sm:p-5"
-        >
-          <Info size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-brand-500" />
-          <p className="text-sm leading-relaxed text-gray-300">
-            <strong className="font-bold text-white">Sitio de demostración.</strong> Las marcas, los productos y
-            los montos de {tienda.name} son de ejemplo, igual que el correo y el teléfono de contacto. Los
-            niveles sí funcionan de verdad dentro de la demostración: agrega productos al carrito y verás cómo
-            cambia el precio al cruzar cada umbral.
-          </p>
-        </div>
-
         {/* Tarjetas de nivel ------------------------------------------------ */}
         <section aria-labelledby="niveles-titulo" className="mt-14">
           <h2 id="niveles-titulo" className="titulo-seccion font-black uppercase text-white">
@@ -358,8 +344,8 @@ export default function Wholesale() {
 
             <Acordeon titulo="¿Puedo pedir un surtido más grande que el nivel 3?">
               <p>
-                En una tienda real ese caso se atendería de forma directa para cotizar disponibilidad y
-                logística. En esta demostración el nivel 3 es el mejor precio disponible.
+                Sí. Para volúmenes mayores escríbenos: cotizamos disponibilidad, precio y logística de forma
+                directa.
               </p>
             </Acordeon>
           </div>
@@ -376,8 +362,7 @@ export default function Wholesale() {
                 ¿Compras para un gimnasio o una tienda?
               </h2>
               <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                Escríbenos y armamos el pedido contigo. Recuerda que estos datos son de ejemplo: en la
-                demostración nadie responde del otro lado.
+                Escríbenos y armamos el pedido contigo.
               </p>
               {tienda.hours && (
                 <p className="mt-3 flex items-center gap-2 text-xs uppercase tracking-widest text-gray-400">

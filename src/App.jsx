@@ -38,6 +38,8 @@ const Terms = lazy(() => import('./pages/Terms'));
 const AboutUs = lazy(() => import('./pages/AboutUs'));
 const Wholesale = lazy(() => import('./pages/Wholesale'));
 const Refunds = lazy(() => import('./pages/Refunds'));
+const Privacidad = lazy(() => import('./pages/Privacidad'));
+const Envios = lazy(() => import('./pages/Envios'));
 
 /** Espera mientras llega el trozo de código de una página. */
 function PantallaDeCarga() {
@@ -121,6 +123,8 @@ function Estructura() {
                   <Route path="/about" element={<AboutUs />} />
                   <Route path="/wholesale" element={<Wholesale />} />
                   <Route path="/refunds" element={<Refunds />} />
+                  <Route path="/privacidad" element={<Privacidad />} />
+                  <Route path="/envios" element={<Envios />} />
 
                   {/* Requieren sesión */}
                   <Route
@@ -140,11 +144,11 @@ function Estructura() {
                     }
                   />
 
-                  {/* Sólo administración */}
+                  {/* Administración (y cuentas de catálogo, sólo con Productos) */}
                   <Route
                     path="/dashboard"
                     element={
-                      <AdminRoute>
+                      <AdminRoute catalogo>
                         <Dashboard />
                       </AdminRoute>
                     }

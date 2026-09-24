@@ -204,10 +204,10 @@ describe('checkout', () => {
     await screen.findByRole('heading', { name: /finalizar compra/i });
 
     // Los valores por defecto de src/data/settings.js.
-    expect(await screen.findByText(/BANCO DEMO/i)).toBeInTheDocument();
+    expect(await screen.findByText(/por configurar/i)).toBeInTheDocument();
     expect(screen.getByText(/000000000000000000/)).toBeInTheDocument();
-    // Y el aviso de que la cuenta es de ejemplo (el texto vive en un <strong>
-    // dentro de un <p>, así que hay más de una coincidencia).
-    expect(screen.getAllByText(/cuenta de ejemplo/i).length).toBeGreaterThan(0);
+    // Y el aviso de que la cuenta no es la definitiva (el texto vive en un
+    // <strong> dentro de un <p>, así que hay más de una coincidencia).
+    expect(screen.getAllByText(/no transfieras dinero/i).length).toBeGreaterThan(0);
   });
 });

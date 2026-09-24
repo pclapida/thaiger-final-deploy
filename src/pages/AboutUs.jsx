@@ -6,8 +6,6 @@ import {
   Boxes,
   ChevronDown,
   Clock,
-  Info,
-  LayoutDashboard,
   Mail,
   MapPin,
   Percent,
@@ -23,15 +21,14 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useSettings } from '../context/SettingsContext';
 import { formatPrice, getPricingConfig } from '../lib/pricing';
 import { fadeUp, resolveVariants } from '../lib/motion';
-import { DEMO_ACCOUNTS, IS_LOCAL_MODE, products as productsApi } from '../services/api';
+import { products as productsApi } from '../services/api';
 
 /**
  * Quiénes Somos.
  *
  * La identidad (nombre, lema, descripción y contacto) sale de los ajustes de
  * la tienda y las cifras del catálogo se cuentan del catálogo real, así que
- * nada de esta página puede quedarse desfasado. Se dice claro que es una
- * demostración, y se explica qué se puede probar dentro de ella.
+ * nada de esta página puede quedarse desfasado.
  */
 
 /** Devuelve el número de los ajustes o el de la configuración de precios. */
@@ -61,7 +58,7 @@ function Acordeon({ titulo, children }) {
 export default function AboutUs() {
   useDocumentTitle(
     'Quiénes Somos',
-    'Qué es Thaiger Supplements, cómo funciona esta tienda de demostración y qué puedes probar dentro de ella.'
+    'Quiénes somos en Thaiger Supplements, cómo comprar, cómo pagar y cómo te llega tu pedido.'
   );
 
   const { settings } = useSettings();
@@ -98,7 +95,6 @@ export default function AboutUs() {
     const base = getPricingConfig();
     return {
       envioGratisDesde: numero(settings.shipping?.freeFrom, base.freeShippingFrom),
-      costoEnvio: numero(settings.shipping?.cost, base.shippingCost),
       nivel2Desde: numero(settings.tiers?.tier2From, base.tier2From),
     };
   }, [settings]);
@@ -115,7 +111,6 @@ export default function AboutUs() {
   }, [productos]);
 
   const whatsapp = String(tienda.whatsapp || '').replace(/\D/g, '');
-  const cuentasDemo = IS_LOCAL_MODE && Array.isArray(DEMO_ACCOUNTS) ? DEMO_ACCOUNTS : [];
 
   const valores = [
     {
@@ -134,9 +129,9 @@ export default function AboutUs() {
     {
       icono: Truck,
       titulo: 'Envío calculado antes de pagar',
-      texto: `${formatPrice(reglas.costoEnvio)} por pedido y gratis desde ${formatPrice(
+      texto: `Gratis desde ${formatPrice(
         reglas.envioGratisDesde
-      )}. El carrito lo muestra antes de confirmar, nunca después.`,
+      )}. El costo se muestra en el carrito antes de confirmar, nunca después.`,
     },
     {
       icono: Store,
@@ -146,34 +141,34 @@ export default function AboutUs() {
     },
   ];
 
-  const hitos = [
+  const pasos = [
     {
-      titulo: 'Un catálogo de ejemplo, completo',
+      titulo: 'Arma tu carrito',
       texto:
-        'Marcas, productos, fotos y ofertas inventadas para que la tienda se vea llena y se pueda navegar de verdad: filtros, búsqueda, fichas y opiniones.',
+        'Elige tus productos. El nivel de precio se activa solo según el monto del carrito, y ves el ahorro antes de pagar.',
     },
     {
-      titulo: IS_LOCAL_MODE ? 'Todo ocurre en tu navegador' : 'Datos en el servicio de la tienda',
-      texto: IS_LOCAL_MODE
-        ? 'No hay servidor: tu cuenta, tus pedidos y tus favoritos se guardan en este equipo. Nadie más los ve, y se van si borras los datos del sitio.'
-        : 'El catálogo, las cuentas y los pedidos viven en el servicio configurado por la tienda.',
+      titulo: 'Confirma tu dirección y el envío',
+      texto: 'Captura dónde recibes y elige el envío. El total que ves es el total que pagas.',
     },
     {
-      titulo: 'El panel de administración está abierto',
+      titulo: 'Paga de forma segura',
       texto:
-        'Puedes entrar con la cuenta de prueba, dar de alta un producto con foto, cambiar precios, activar una oferta y despachar un pedido.',
+        settings.payment?.gateway === 'mercadopago'
+          ? 'Con tarjeta, transferencia SPEI u OXXO a través de Mercado Pago. Nunca vemos ni guardamos los datos de tu tarjeta.'
+          : 'Por transferencia SPEI a la cuenta que te mostramos al confirmar, con un concepto único para identificar tu pago.',
     },
     {
-      titulo: 'Ningún cobro es real',
+      titulo: 'Recibe y rastrea',
       texto:
-        'El checkout arma el pedido, descuenta inventario y genera un concepto de transferencia, pero la cuenta bancaria es de ejemplo y nadie recibe dinero.',
+        'En cuanto se confirma el pago preparamos tu pedido. El número de guía aparece en tu perfil, en «Mis pedidos».',
     },
   ];
 
   const rutas = [
     { to: '/shop', icono: Boxes, titulo: 'Recorrer el catálogo', texto: 'Filtra por marca, categoría y precio.' },
     { to: '/wholesale', icono: Percent, titulo: 'Ver el mayoreo', texto: 'Los tres niveles y sus umbrales.' },
-    { to: '/dashboard', icono: LayoutDashboard, titulo: 'Entrar al panel', texto: 'Productos, pedidos y métricas.' },
+    { to: '/offers', icono: Sparkles, titulo: 'Ver las ofertas', texto: 'Los productos con descuento vigente.' },
   ];
 
   return (
@@ -190,19 +185,6 @@ export default function AboutUs() {
           <p className="mt-5 text-lg leading-relaxed text-gray-300">{tienda.tagline}.</p>
           <p className="mt-4 text-base leading-relaxed text-gray-400">{tienda.description}</p>
         </motion.header>
-
-        <div
-          role="note"
-          className="mt-8 flex max-w-3xl items-start gap-3 rounded-xl border border-brand-600/40 bg-brand-600/10 p-4 sm:p-5"
-        >
-          <Info size={20} aria-hidden="true" className="mt-0.5 shrink-0 text-brand-500" />
-          <p className="text-sm leading-relaxed text-gray-300">
-            <strong className="font-bold text-white">Esto es una demostración.</strong> {tienda.name} no es una
-            empresa: es una tienda de ejemplo construida para mostrar cómo funciona un comercio en línea de
-            principio a fin. Marcas, productos, precios, dirección, teléfono y datos bancarios son ficticios, y
-            ningún pedido se envía ni se cobra.
-          </p>
-        </div>
 
         {/* Cifras del catálogo ---------------------------------------------- */}
         <section aria-label="Cifras del catálogo" className="mt-12">
@@ -275,68 +257,62 @@ export default function AboutUs() {
           </div>
         </section>
 
-        {/* Cómo funciona la demostración ------------------------------------- */}
-        <section aria-labelledby="demo-titulo" className="mt-16 max-w-3xl">
-          <h2 id="demo-titulo" className="titulo-seccion font-black uppercase text-white">
-            Cómo funciona esta demostración
+        {/* Cómo comprar ---------------------------------------------------- */}
+        <section aria-labelledby="comprar-titulo" className="mt-16 max-w-3xl">
+          <h2 id="comprar-titulo" className="titulo-seccion font-black uppercase text-white">
+            Cómo comprar
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-gray-400">
-            Cuatro cosas que conviene saber antes de dar una vuelta por la tienda.
-          </p>
 
           <ol className="mt-8 space-y-8 border-l border-gray-800 pl-8">
-            {hitos.map((hito, indice) => (
-              <Reveal as="li" key={hito.titulo} index={indice} className="relative">
+            {pasos.map((paso, indice) => (
+              <Reveal as="li" key={paso.titulo} index={indice} className="relative">
                 <span
                   aria-hidden="true"
                   className="absolute -left-[42px] flex h-7 w-7 items-center justify-center rounded-full border border-brand-600/50 bg-carbon-900 text-xs font-black text-brand-500"
                 >
                   {indice + 1}
                 </span>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-white">{hito.titulo}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-400">{hito.texto}</p>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-white">{paso.titulo}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-400">{paso.texto}</p>
               </Reveal>
             ))}
           </ol>
 
-          {cuentasDemo.length > 0 && (
-            <div className="mt-8">
-              <Acordeon titulo="Cuentas de prueba para entrar">
-                <p>
-                  Cualquiera puede usarlas. No guardes en ellas información privada: son públicas y se
-                  reinician al restablecer la demostración.
-                </p>
-                <ul className="space-y-2">
-                  {cuentasDemo.map((cuenta) => (
-                    <li
-                      key={cuenta.email}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-800 bg-carbon-900 px-4 py-3"
-                    >
-                      <span className="font-mono text-xs text-gray-300">{cuenta.email}</span>
-                      <span className="font-mono text-xs text-gray-400">{cuenta.password}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-brand-500">
-                        {cuenta.role === 'admin' ? 'Administración' : 'Cliente'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Acordeon>
-            </div>
-          )}
-
-          <div className="mt-6 space-y-3">
-            <Acordeon titulo="¿Puedo usar este sitio para comprar suplementos?">
+          <div className="mt-10 space-y-3">
+            <Acordeon titulo="¿Los productos son originales?">
               <p>
-                No. No hay productos que enviar ni forma de cobrar: es una demostración. Si buscas suplementos,
-                acude a una tienda real.
+                Sí. Vendemos producto original, sellado y con caducidad vigente. Si algo te llega abierto, dañado o
+                distinto a lo que pediste, repórtalo y lo resolvemos.
               </p>
             </Acordeon>
-            <Acordeon titulo="¿Qué pasa con los datos que registro?">
+            <Acordeon titulo="¿Cuándo llega mi pedido?">
               <p>
-                {IS_LOCAL_MODE
-                  ? 'Se quedan en tu navegador y no viajan a ningún servidor. Puedes borrarlos limpiando los datos del sitio.'
-                  : 'Se guardan en el servicio configurado por la tienda y se usan sólo para operar los pedidos.'}{' '}
-                Aun así, no registres información sensible en un sitio de prueba.
+                Lo preparamos después de confirmar tu pago y el tiempo de traslado depende de la paquetería y de tu
+                código postal. Los detalles están en{' '}
+                <Link to="/envios" className="text-brand-400 underline-offset-2 hover:underline">
+                  Envíos y entregas
+                </Link>
+                .
+              </p>
+            </Acordeon>
+            <Acordeon titulo="¿Puedo devolver un producto?">
+              <p>
+                Sí, dentro de los plazos y condiciones de nuestra{' '}
+                <Link to="/refunds" className="text-brand-400 underline-offset-2 hover:underline">
+                  política de devoluciones
+                </Link>
+                . Por tratarse de suplementos, el producto debe estar cerrado y con su sello intacto, salvo que
+                haya llegado dañado o con defecto.
+              </p>
+            </Acordeon>
+            <Acordeon titulo="¿Qué hacen con mis datos?">
+              <p>
+                Los usamos sólo para operar tu cuenta y tus pedidos. Cómo, con quién y cómo ejercer tus derechos
+                está en el{' '}
+                <Link to="/privacidad" className="text-brand-400 underline-offset-2 hover:underline">
+                  aviso de privacidad
+                </Link>
+                .
               </p>
             </Acordeon>
           </div>
@@ -345,7 +321,7 @@ export default function AboutUs() {
         {/* Qué probar -------------------------------------------------------- */}
         <section aria-labelledby="probar-titulo" className="mt-16">
           <h2 id="probar-titulo" className="titulo-seccion font-black uppercase text-white">
-            Date una vuelta
+            Empieza por aquí
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-3">
@@ -380,8 +356,7 @@ export default function AboutUs() {
             Dónde encontrarnos
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-400">
-            Estos son los datos de contacto que la tienda tiene configurados. Como todo lo demás en la
-            demostración, son de ejemplo: nadie contesta del otro lado.
+            ¿Dudas sobre un producto, un pedido o una compra por volumen? Escríbenos.
           </p>
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-2">

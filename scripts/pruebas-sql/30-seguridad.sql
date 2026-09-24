@@ -104,3 +104,77 @@ begin
     end;
 end $$;
 reset role;
+
+-- 10. Rol «catalogo»: toca productos y sus fotos, y nada más.
+do $$
+begin
+    perform set_config('test.uid', '', false);
+    insert into auth.users (id, email) values ('66666666-6666-6666-6666-666666666666', 'catalogo@thaiger.mx');
+    update public.users set role = 'catalogo' where id = '66666666-6666-6666-6666-666666666666';
+
+    begin
+        update public.users set role = 'superadmin' where id = '66666666-6666-6666-6666-666666666666';
+        raise exception 'un rol inventado no debería guardarse';
+    exception when check_violation then
+        perform pruebas.afirmar(true, 'la base rechaza roles que no existen');
+    end;
+end $$;
+
+set role authenticated;
+select set_config('test.uid', '66666666-6666-6666-6666-666666666666', false);
+do $$
+declare v_filas int;
+begin
+    insert into public.products (id, name, brand, category, price1, price2, price3, stock)
+    values (900, 'Alta de catálogo', 'THAIGER LABS', 'Proteínas', 700, 650, 600, 4);
+    update public.products set stock = 9 where id = 900;
+    perform pruebas.afirmar(
+        (select stock from public.products where id = 900) = 9,
+        'una cuenta de catálogo da de alta y edita productos');
+    delete from public.products where id = 900;
+    perform pruebas.afirmar(
+        not exists (select 1 from public.products where id = 900),
+        'y puede borrarlos');
+
+    insert into storage.objects (bucket_id, name) values ('product-images', 'nuevo/foto.webp');
+    perform pruebas.afirmar(true, 'una cuenta de catálogo sube fotos de producto');
+
+    update public.settings set value = '{}'::jsonb where id = 'site';
+    get diagnostics v_filas = row_count;
+    perform pruebas.afirmar(v_filas = 0, 'una cuenta de catálogo no cambia los ajustes (ni la CLABE)');
+
+    update public.orders set status = 'Cancelado';
+    get diagnostics v_filas = row_count;
+    perform pruebas.afirmar(v_filas = 0, 'ni el estatus de los pedidos');
+    perform pruebas.afirmar(
+        (select count(*) from public.orders) = 0,
+        'ni ve los pedidos de la tienda');
+    perform pruebas.afirmar(
+        (select count(*) from public.users) = 1,
+        'ni la lista de cuentas (sólo su propio perfil)');
+
+    update public.users set role = 'admin' where id = '66666666-6666-6666-6666-666666666666';
+    perform pruebas.afirmar(
+        (select role from public.users where id = '66666666-6666-6666-6666-666666666666') = 'catalogo',
+        'ni se asciende a admin');
+end $$;
+reset role;
+
+-- 11. Un perfil borrado no se puede volver a insertar como admin.
+--     (Existía la política «Cada quien crea su perfil» y proteger_rol sólo
+--     vigila UPDATE: la cuenta podía reinsertarse con role = 'admin'.)
+delete from public.users where id = '66666666-6666-6666-6666-666666666666';
+set role authenticated;
+select set_config('test.uid', '66666666-6666-6666-6666-666666666666', false);
+do $$
+begin
+    begin
+        insert into public.users (id, email, name, role)
+        values ('66666666-6666-6666-6666-666666666666', 'catalogo@thaiger.mx', 'Yo', 'admin');
+        raise exception 'no debería poder crear su propio perfil de admin';
+    exception when insufficient_privilege then
+        perform pruebas.afirmar(true, 'nadie inserta su propio perfil (ni como admin)');
+    end;
+end $$;
+reset role;
+delete from storage.objects where name = 'nuevo/foto.webp';

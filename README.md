@@ -177,10 +177,10 @@ variable `VITE_*`: eso la publica en el navegador.
 
 1. **Cambia la cuenta bancaria.** El checkout muestra una CLABE de ejemplo
    (`000000000000000000`, «BANCO DEMO»). Se edita en `/dashboard → Ajustes`, y
-   mientras la casilla «datos de ejemplo» siga marcada el sitio lo avisa en rojo.
+   mientras la casilla «La cuenta bancaria aún no es la definitiva» siga marcada el sitio lo avisa en rojo.
 2. **Sustituye el catálogo de demostración** por el real, con sus fotos.
 3. **Configura Supabase**: en modo local los datos viven en un solo navegador.
-4. **Quita el `noindex`** de `index.html` cuando la tienda deje de ser una demo.
+4. **Captura los datos legales** en `/dashboard → Ajustes → Datos legales` (razón social, RFC, domicilio).
 5. Nadie concilia los pagos SPEI todavía: el admin verifica a mano y cambia el
    estatus. Considera una pasarela (Stripe / Mercado Pago).
 6. No se envían correos (confirmación de pedido, cambio de estatus, recuperación

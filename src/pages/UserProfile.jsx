@@ -33,6 +33,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useSettings } from '../context/SettingsContext';
 import { auth as authApi, orders as ordersApi, payments as paymentsApi, products as productsApi } from '../services/api';
 import { formatPrice } from '../lib/pricing';
+import { ETIQUETAS_ROL, normalizarRol, puedeEntrarAlPanel } from '../lib/roles';
 import { ESTADOS_PEDIDO } from '../lib/metrics';
 import { sanitizeImageUrl, sanitizeText, validatePassword } from '../lib/security';
 import { fadeUp, resolveVariants, staggerContainer, staggerItem } from '../lib/motion';
@@ -403,7 +404,7 @@ export default function UserProfile() {
   // ------------------------------------------------------------------ vista
 
   const avatar = user?.avatar_url;
-  const esAdmin = user?.role === 'admin';
+  const entraAlPanel = puedeEntrarAlPanel(user?.role);
 
   return (
     <div className="min-h-screen bg-carbon-900 text-white">
@@ -440,10 +441,10 @@ export default function UserProfile() {
             <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
-                  esAdmin ? 'border-brand-600/40 bg-brand-600/15 text-brand-400' : 'border-gray-700 bg-carbon-700 text-gray-300'
+                  entraAlPanel ? 'border-brand-600/40 bg-brand-600/15 text-brand-400' : 'border-gray-700 bg-carbon-700 text-gray-300'
                 }`}
               >
-                <ShieldCheck size={13} aria-hidden="true" /> {esAdmin ? 'Administrador' : 'Cliente'}
+                <ShieldCheck size={13} aria-hidden="true" /> {ETIQUETAS_ROL[normalizarRol(user?.role)]}
               </span>
               {user?.created_at && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-800 px-3 py-1 text-[11px] uppercase tracking-wider text-gray-500">
@@ -453,7 +454,7 @@ export default function UserProfile() {
             </div>
           </div>
 
-          {esAdmin && (
+          {entraAlPanel && (
             <Link
               to="/dashboard"
               className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-sm border border-brand-600/50 px-5 py-3 text-xs font-bold uppercase tracking-widest text-brand-500 transition-colors hover:bg-brand-600 hover:text-white"

@@ -87,8 +87,43 @@ describe('productos: quién puede tocarlos', () => {
 
   it('un cliente normal tampoco puede', async () => {
     await auth.signIn(DEMO_CUSTOMER.email, DEMO_CUSTOMER.password);
-    await expect(products.update(1, { stock: 5 })).rejects.toThrow(/administrador/i);
-    await expect(products.bulkRemove([1])).rejects.toThrow(/administrador/i);
+    await expect(products.update(1, { stock: 5 })).rejects.toThrow(/no puede modificar el catálogo/i);
+    await expect(products.bulkRemove([1])).rejects.toThrow(/no puede modificar el catálogo/i);
+  });
+});
+
+describe('rol catálogo', () => {
+  const CATALOGO = { email: 'catalogo@thaiger.mx', password: 'catalogo123', name: 'Carga de productos' };
+
+  beforeEach(async () => {
+    await entrarComoAdmin();
+    await users.create({ ...CATALOGO, role: 'catalogo' });
+    await auth.signOut();
+    await auth.signIn(CATALOGO.email, CATALOGO.password);
+  });
+
+  it('entra con su rol', async () => {
+    expect(await auth.getSession()).toMatchObject({ email: CATALOGO.email, role: 'catalogo' });
+  });
+
+  it('crea, edita y borra productos', async () => {
+    const creado = await products.create({ name: 'Alta', brand: 'THAIGER LABS', category: 'Proteínas', price1: 700 });
+    expect((await products.update(creado.id, { stock: 9 })).stock).toBe(9);
+    await products.remove(creado.id);
+    expect(await products.get(creado.id)).toBeNull();
+  });
+
+  it('no ve pedidos ni cuentas, ni cambia los ajustes', async () => {
+    await expect(orders.listAll()).rejects.toThrow(/administrador/i);
+    await expect(users.list()).rejects.toThrow(/administrador/i);
+    await expect(settings.update({ storeName: 'Otra' })).rejects.toThrow(/administrador/i);
+  });
+
+  it('un rol inventado se guarda como cliente', async () => {
+    await auth.signOut();
+    await entrarComoAdmin();
+    const cuenta = await users.create({ email: 'raro@thaiger.mx', password: 'raro12345', role: 'superadmin' });
+    expect(cuenta.role).toBe('user');
   });
 });
 
@@ -433,7 +468,7 @@ describe('configuración de la tienda', () => {
 
     expect(guardado.store.name).toBe('Tienda Nueva');
     // Los demás campos siguen ahí aunque el parche sólo traiga uno.
-    expect(guardado.store.email).toBeTruthy();
+    expect(guardado.store.tagline).toBeTruthy();
     expect(guardado.payment.bank).toBeTruthy();
   });
 

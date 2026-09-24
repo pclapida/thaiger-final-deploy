@@ -19,6 +19,7 @@ import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data
 // Postgres (create_order). Aquí sólo se sincronizan los umbrales para que
 // el resumen del carrito coincida con lo que va a cobrar el servidor.
 import { configurePricing } from '../lib/pricing';
+import { normalizarRol } from '../lib/roles';
 import {
   isValidEmail,
   normalizeEmail,
@@ -306,7 +307,7 @@ async function toAppUser(session) {
     id: sbUser.id,
     email: sbUser.email,
     name: row?.name || sbUser.user_metadata?.name || 'Usuario Thaiger',
-    role: row?.role || 'user',
+    role: normalizarRol(row?.role),
     avatar_url: row?.avatar_url || sbUser.user_metadata?.avatar_url || null,
     created_at: row?.created_at || sbUser.created_at,
   };
@@ -462,12 +463,14 @@ export const users = {
 
   async create() {
     // Crear cuentas ajenas requiere la service_role key, que jamás va en el
-    // navegador. Se hace desde scripts/create-admin.js o el panel de Supabase.
-    throw new Error('Con Supabase, las cuentas se crean desde el registro o con scripts/create-admin.js.');
+    // navegador. Se hace desde el panel de Supabase o con scripts/create-admin.js.
+    throw new Error(
+      'Con Supabase, las cuentas se crean en su panel: Authentication → Users → Add user (con «Auto Confirm User»). Después, aquí le asignas el rol.'
+    );
   },
 
   async setRole(userId, role) {
-    const siguiente = role === 'admin' ? 'admin' : 'user';
+    const siguiente = normalizarRol(role);
     const rows = unwrap(await supabase.from('users').update({ role: siguiente }).eq('id', userId).select());
     return rows?.[0] ?? { id: userId, role: siguiente };
   },

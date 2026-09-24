@@ -51,7 +51,9 @@ const RUTAS_PUBLICAS = [
   ['/terms', /^términos y condiciones$/i],
   ['/about', /^quiénes somos$/i],
   ['/wholesale', /^programa de mayoreo$/i],
-  ['/refunds', /^políticas de devolución$/i],
+  ['/refunds', /^devoluciones y reembolsos$/i],
+  ['/privacidad', /^aviso de privacidad$/i],
+  ['/envios', /^envíos y entregas$/i],
 ];
 
 describe('rutas de la aplicación', () => {

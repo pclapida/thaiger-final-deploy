@@ -36,8 +36,14 @@ const ATENCION = [
   { to: '/shop', etiqueta: 'Realizar Pedido' },
   { to: '/cart', etiqueta: 'Mi Carrito' },
   { to: '/profile', etiqueta: 'Mi Cuenta' },
-  { to: '/refunds', etiqueta: 'Política de Reembolsos' },
-  { to: '/terms', etiqueta: 'Términos y Condiciones' },
+  { to: '/envios', etiqueta: 'Envíos y Entregas' },
+  { to: '/refunds', etiqueta: 'Devoluciones y Reembolsos' },
+];
+
+const LEGALES = [
+  { to: '/terms', etiqueta: 'Términos y condiciones' },
+  { to: '/privacidad', etiqueta: 'Aviso de privacidad' },
+  { to: '/refunds', etiqueta: 'Devoluciones' },
 ];
 
 const EMPRESA = [
@@ -234,16 +240,63 @@ export default function Footer() {
         </div>
       </div>
 
+      {/* ---------------------------------------------------- colaboración */}
+      <div className="border-t border-carbon-700">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-4 px-4 py-10">
+          <p className="sr-only">Colaboración</p>
+          <div className="flex items-center gap-4 sm:gap-8">
+            <img
+              src="/images/colaboracion/nunca-dejes-de-amar.webp"
+              alt="Ilustración «Nunca dejes de amar»"
+              width="273"
+              height="320"
+              loading="lazy"
+              className="h-24 w-auto object-contain sm:h-32"
+            />
+            <span aria-hidden="true" className="text-2xl font-light text-brand-500 sm:text-3xl">
+              ×
+            </span>
+            <img
+              src="/images/colaboracion/corazon-mecanico.webp"
+              alt="Emblema de corazón mecánico"
+              width="280"
+              height="320"
+              loading="lazy"
+              className="h-24 w-auto object-contain sm:h-32"
+            />
+          </div>
+          <p className="text-[11px] uppercase tracking-[0.3em] text-gray-400">
+            Desarrollada por <span className="font-bold text-white">José Hernández</span>
+          </p>
+        </div>
+      </div>
+
       {/* ------------------------------------------------------ barra inferior */}
       <div className="border-t border-carbon-700">
-        {/* Gris claro a propósito: sobre negro, `gray-600`/`gray-700` no pasan de
-            2.8:1 y justo el aviso de que la tienda es una demo hay que leerlo. */}
+        {/* Gris claro a propósito: sobre negro, `gray-600`/`gray-700` no pasan de 2.8:1. */}
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-4 py-6 text-center text-[11px] uppercase tracking-widest text-gray-400 sm:flex-row sm:justify-between sm:text-left">
           <p>
             © {anio} {nombre}
           </p>
-          <p>Sitio de demostración · Datos de ejemplo</p>
+          <ul className="flex flex-wrap justify-center gap-x-4">
+            {LEGALES.map((enlace) => (
+              <li key={enlace.to}>
+                <Link
+                  to={enlace.to}
+                  className="flex min-h-11 items-center transition-colors hover:text-brand-500 sm:min-h-0"
+                >
+                  {enlace.etiqueta}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
+
+        {/* Leyenda obligatoria en la publicidad de suplementos alimenticios. */}
+        <p className="mx-auto max-w-7xl px-4 pb-6 text-center text-[10px] uppercase tracking-widest text-gray-400">
+          Estos productos no son medicamentos. El consumo de estos productos es responsabilidad de quien los
+          recomienda y de quien los usa.
+        </p>
       </div>
     </footer>
   );

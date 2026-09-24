@@ -126,7 +126,7 @@ import { products, orders, auth, users, settings, maintenance,
 
 | Módulo | Operaciones | Permiso |
 |---|---|---|
-| `products` | `list()` `get(id)` `create(data)` `update(id, patch)` `remove(id)` `bulkUpdate(ids, patch)` `bulkRemove(ids)` `renameGroup('brand'\|'category', desde, hacia)` `uploadImage(file)` | lectura libre; escritura **admin** |
+| `products` | `list()` `get(id)` `create(data)` `update(id, patch)` `remove(id)` `bulkUpdate(ids, patch)` `bulkRemove(ids)` `renameGroup('brand'\|'category', desde, hacia)` `uploadImage(file)` | lectura libre; escritura **admin** o **catálogo** |
 | `orders` | `listAll()` `listByUser(id)` `create({...})` `updateStatus(id, estado)` `remove(id)` | `listAll`/`updateStatus`/`remove` **admin**; `listByUser` sólo la propia cuenta (o admin) |
 | `auth` | `getSession()` `onAuthStateChange(cb)` `signIn` `signUp` `signOut` `updateProfile(id, {name, avatar_url})` `changePassword(actual, nueva)` `requestPasswordReset(email)` `completePasswordReset(nueva)` `uploadAvatar(file)` | — |
 | `users` | `list()` `create({...})` `setRole(id, rol)` `remove(id)` `setPassword(id, nueva)` | **admin** |
@@ -219,7 +219,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (285 pruebas, 19 archivos)
+npm test             # suite completa (300 pruebas, 21 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -295,7 +295,13 @@ Lo que está resuelto:
 - **Perfiles**: `public.users` se llena con el disparador `crear_perfil_de_usuario`
   sobre `auth.users`, no desde el navegador (con confirmación de correo no hay
   sesión al registrarse y la RLS rechazaba el insert).
-- **Storage por rol**: las fotos de producto sólo las escribe un admin; el avatar,
+- **Roles** (`src/lib/roles.js`): `user`, `catalogo` y `admin`. La cuenta de
+  catálogo sólo ve la pestaña Productos; en Supabase la frontera es
+  `puede_editar_catalogo()` en las políticas de `products` y del bucket de
+  fotos, más un `check` que rechaza roles inventados. `public.users` no tiene
+  política de INSERT: el perfil lo crea el disparador (con la política vieja,
+  una cuenta cuyo perfil se borraba podía reinsertarse como admin).
+- **Storage por rol**: las fotos de producto sólo las escriben admin y catálogo; el avatar,
   cada quien dentro de su propia carpeta (`avatars/<uid>/`).
 
 Lo que hay que saber:
@@ -318,8 +324,9 @@ Todo lo que se ve al arrancar es de ejemplo:
 - **Cuentas**: `admin@thaiger.mx` / `admin123` y `cliente@thaiger.mx` / `cliente123`.
 - **Pedidos**: seis pedidos de ejemplo del cliente, repartidos en los últimos
   meses, para que el panel arranque con una gráfica que mirar.
-- **Configuración**: contacto, cuenta SPEI (`BANCO DEMO`, CLABE de ceros),
-  redes vacías y aviso de demostración. Todo editable en `/dashboard`.
+- **Configuración**: contacto vacío (se captura en Ajustes), cuenta SPEI
+  «Por configurar» con CLABE de ceros y la casilla de cuenta no definitiva
+  marcada, redes vacías y sin aviso superior. Todo editable en `/dashboard`.
 
 ---
 
@@ -339,7 +346,10 @@ Lista corta; el detalle y el orden sugerido están en [`reporte.md`](reporte.md)
 4. **Opiniones locales**: viven en el `localStorage` de cada visitante.
 5. **Modo local ≠ producción**: los datos viven en un solo navegador.
 6. **Nadie ha abierto la tienda en un navegador real**: está verificada en jsdom.
-7. El `noindex` de `index.html` hay que quitarlo cuando deje de ser una demo.
+7. **Textos legales** (`Terms`, `Privacidad`, `Refunds`, `Envios`, con el
+   armazón `components/legal/DocumentoLegal.jsx`): quién vende sale de
+   Ajustes → Datos legales (`src/lib/legal.js`). Son una base; falta que los
+   revise un abogado. Si cambias el texto, cambia `VIGENCIA_LEGAL`.
 
 **Al escribir código nuevo:**
 
@@ -386,11 +396,10 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 
 - Catálogo y fotos reales, con peso y medidas por producto.
 - Cuenta bancaria real (`/dashboard → Ajustes`, desmarcar «datos de ejemplo»).
-- Razón social, RFC, domicilio fiscal, aviso de privacidad y plazos reales para
-  **reescribir** `src/pages/Terms.jsx`, `Refunds.jsx` y `AboutUs.jsx`: hoy
-  están redactados como demostración (dicen literalmente que no hay empresa
-  detrás). Son ~38 menciones de "demostración/ejemplo" en 8 archivos.
-- Quitar el `noindex` de `index.html` y el aviso de demostración del banner.
+- Razón social, RFC y domicilio en Ajustes → Datos legales. Los textos legales
+  y públicos ya no hablan de demostración (se reescribieron el 24/09/2026) y
+  el `noindex` ya no está; lo único «de ejemplo» que queda a la vista es la
+  cuenta SPEI mientras «La cuenta bancaria aún no es la definitiva» siga marcada.
 
 ### Orden sugerido para seguir
 
@@ -417,7 +426,7 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (285 / 19) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (300 / 21) se actualizan a mano cuando
   cambian.
 - **Nunca uses `async` ni llames a Supabase dentro de
   `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de

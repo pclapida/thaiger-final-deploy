@@ -500,9 +500,9 @@ export default function Checkout() {
                 <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
                   <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={20} aria-hidden="true" />
                   <p className="text-amber-200">
-                    <strong className="font-bold">Cuenta de ejemplo.</strong> Esta tienda es una demostración: los datos
-                    bancarios de abajo son ficticios. <strong>No transfieras dinero.</strong> Puedes completar el pedido
-                    para ver el flujo completo.
+                    <strong className="font-bold">Cuenta bancaria por confirmar.</strong> Los datos de abajo todavía
+                    no son los definitivos. <strong>No transfieras dinero a esta cuenta:</strong> confirma tu pedido y
+                    te contactaremos con los datos de pago.
                   </p>
                 </div>
               )}

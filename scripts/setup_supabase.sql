@@ -24,9 +24,16 @@ drop policy if exists "Cada quien ve su perfil" on public.users;
 create policy "Cada quien ve su perfil" on public.users
     for select using (auth.uid() = id);
 
+-- Sin política de INSERT: el perfil lo crea el disparador
+-- crear_perfil_de_usuario (más abajo). Antes existía «Cada quien crea su
+-- perfil», y con ella una cuenta cuyo perfil había borrado un admin podía
+-- volver a insertarlo con role = 'admin': proteger_rol sólo vigila UPDATE.
 drop policy if exists "Cada quien crea su perfil" on public.users;
-create policy "Cada quien crea su perfil" on public.users
-    for insert with check (auth.uid() = id);
+
+-- Roles válidos: cliente, catálogo (sólo productos) y administrador.
+alter table public.users drop constraint if exists users_role_valido;
+alter table public.users add constraint users_role_valido
+    check (role in ('user', 'catalogo', 'admin'));
 
 drop policy if exists "Cada quien edita su perfil" on public.users;
 create policy "Cada quien edita su perfil" on public.users
@@ -40,6 +47,16 @@ security definer
 set search_path = public
 as $$
     select exists (select 1 from public.users where id = auth.uid() and role = 'admin');
+$$;
+
+-- Cuentas que pueden tocar el catálogo (productos y sus fotos).
+create or replace function public.puede_editar_catalogo()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+    select exists (select 1 from public.users where id = auth.uid() and role in ('admin', 'catalogo'));
 $$;
 
 drop policy if exists "Admins ven todos los perfiles" on public.users;
@@ -156,13 +173,14 @@ alter table public.products add column if not exists height_cm integer not null 
 
 alter table public.products enable row level security;
 
--- El catálogo es público; sólo el administrador escribe.
+-- El catálogo es público; escriben el administrador y las cuentas de catálogo.
 drop policy if exists "Catálogo público" on public.products;
 create policy "Catálogo público" on public.products for select using (true);
 
 drop policy if exists "Admins administran productos" on public.products;
-create policy "Admins administran productos" on public.products
-    for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Catálogo administra productos" on public.products;
+create policy "Catálogo administra productos" on public.products
+    for all using (public.puede_editar_catalogo()) with check (public.puede_editar_catalogo());
 
 -- ------------------------------------------------------------------ PEDIDOS
 create table if not exists public.orders (
@@ -689,16 +707,17 @@ drop policy if exists "Imágenes públicas" on storage.objects;
 create policy "Imágenes públicas" on storage.objects
     for select using (bucket_id in ('product-images', 'avatars'));
 
--- Las fotos del catálogo son del catálogo: sólo el administrador las toca.
+-- Las fotos del catálogo son del catálogo: sólo admin y cuentas de catálogo.
 -- (Antes bastaba con tener cuenta, así que cualquier cliente registrado podía
 -- escribir en el bucket público de la tienda.)
 drop policy if exists "Usuarios autenticados suben imágenes" on storage.objects;
 
 drop policy if exists "Admins gestionan fotos de producto" on storage.objects;
-create policy "Admins gestionan fotos de producto" on storage.objects
+drop policy if exists "Catálogo gestiona fotos de producto" on storage.objects;
+create policy "Catálogo gestiona fotos de producto" on storage.objects
     for all to authenticated
-    using (bucket_id = 'product-images' and public.is_admin())
-    with check (bucket_id = 'product-images' and public.is_admin());
+    using (bucket_id = 'product-images' and public.puede_editar_catalogo())
+    with check (bucket_id = 'product-images' and public.puede_editar_catalogo());
 
 -- Cada quien escribe su avatar, y sólo dentro de su propia carpeta:
 -- avatars/<auth.uid()>/<archivo>. Así nadie pisa la foto de otra persona.
@@ -719,6 +738,7 @@ create policy "Cada quien gestiona su avatar" on storage.objects
 --   1. Crea tu cuenta desde /register en la app.
 --   2. Conviértela en administradora:
 --        update public.users set role = 'admin' where email = 'tu@correo.com';
+--      (role = 'catalogo' para quien sólo carga productos)
 --      (o bien: SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scripts/create-admin.js correo password)
 --   3. Carga el catálogo de ejemplo:  node scripts/upload-supabase.js
 --

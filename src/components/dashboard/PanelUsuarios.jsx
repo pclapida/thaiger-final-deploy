@@ -3,6 +3,7 @@ import { AlertTriangle, KeyRound, RefreshCw, ShieldCheck, Trash2, UserPlus, User
 import toast from 'react-hot-toast';
 import { users as usuariosApi, IS_LOCAL_MODE } from '../../services/api';
 import { passwordStrength, validatePassword } from '../../lib/security';
+import { ETIQUETAS_ROL, ROLES, normalizarRol } from '../../lib/roles';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
 import Modal from '../ui/Modal';
@@ -26,6 +27,15 @@ function fechaCorta(iso) {
   if (!iso) return '—';
   const fecha = new Date(iso);
   return Number.isNaN(fecha.getTime()) ? '—' : fecha.toLocaleDateString('es-MX');
+}
+
+/** Las opciones de rol, en el mismo orden en todos los selectores. */
+function OpcionesDeRol() {
+  return ROLES.map((rol) => (
+    <option key={rol} value={rol}>
+      {ETIQUETAS_ROL[rol]}
+    </option>
+  ));
 }
 
 /** Iniciales de respaldo cuando la cuenta no tiene foto. */
@@ -102,7 +112,7 @@ export default function PanelUsuarios({ pedidos = [] }) {
       setUsuarios((previos) =>
         previos.map((actual) => (actual.id === usuario.id ? { ...actual, ...actualizado } : actual))
       );
-      toast.success(`${usuario.email} ahora es ${rol === 'admin' ? 'administrador' : 'cliente'}`);
+      toast.success(`${usuario.email} ahora tiene el rol ${ETIQUETAS_ROL[normalizarRol(rol)]}`);
     } catch (fallo) {
       toast.error(fallo.message);
     } finally {
@@ -202,8 +212,9 @@ export default function PanelUsuarios({ pedidos = [] }) {
 
       {!IS_LOCAL_MODE && (
         <p className="rounded-lg border border-amber-700/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
-          Con Supabase, las altas y los cambios de contraseña se hacen desde su panel o con
-          <code className="mx-1">scripts/create-admin.js</code>: la llave de servicio nunca viaja al navegador.
+          Con Supabase, las cuentas nuevas se crean en su panel (Authentication → Users → Add user, con
+          «Auto Confirm User») y aquí se les asigna el rol. «Catálogo» sólo puede cargar y editar productos.
+          Las contraseñas se restablecen por correo desde «¿Olvidaste tu contraseña?».
         </p>
       )}
 
@@ -282,17 +293,16 @@ export default function PanelUsuarios({ pedidos = [] }) {
                       <td className="px-4 py-3">
                         <select
                           aria-label={`Rol de ${usuario.email}`}
-                          value={usuario.role === 'admin' ? 'admin' : 'user'}
+                          value={normalizarRol(usuario.role)}
                           disabled={trabajando}
                           onChange={(evento) => cambiarRol(usuario, evento.target.value)}
                           className={inputClasses({
                             extra: `min-h-[44px] w-40 text-xs font-bold uppercase ${
-                              usuario.role === 'admin' ? 'text-brand-500' : 'text-gray-300'
+                              usuario.role === 'user' || !usuario.role ? 'text-gray-300' : 'text-brand-500'
                             }`,
                           })}
                         >
-                          <option value="user">Cliente</option>
-                          <option value="admin">Administrador</option>
+                          <OpcionesDeRol />
                         </select>
                       </td>
 
@@ -363,13 +373,12 @@ export default function PanelUsuarios({ pedidos = [] }) {
 
                     <select
                       aria-label={`Cambiar rol de ${usuario.email}`}
-                      value={usuario.role === 'admin' ? 'admin' : 'user'}
+                      value={normalizarRol(usuario.role)}
                       disabled={trabajando}
                       onChange={(evento) => cambiarRol(usuario, evento.target.value)}
                       className={inputClasses({ extra: 'ml-auto min-h-[44px] w-36 font-bold uppercase' })}
                     >
-                      <option value="user">Cliente</option>
-                      <option value="admin">Administrador</option>
+                      <OpcionesDeRol />
                     </select>
 
                     <button
@@ -448,11 +457,8 @@ export default function PanelUsuarios({ pedidos = [] }) {
 
           <fieldset className="space-y-2">
             <legend className="text-xs font-bold uppercase tracking-wider text-gray-400">Rol</legend>
-            <div className="flex gap-3">
-              {[
-                { valor: 'user', etiqueta: 'Cliente' },
-                { valor: 'admin', etiqueta: 'Administrador' },
-              ].map((opcion) => (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {ROLES.map((rol) => ({ valor: rol, etiqueta: ETIQUETAS_ROL[rol] })).map((opcion) => (
                 <label
                   key={opcion.valor}
                   className={`flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-sm border px-4 text-xs font-bold uppercase tracking-widest transition-colors ${

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Database, Download, HardDrive, RotateCcw, Upload } from 'lucide-react';
+import { Database, Download, HardDrive, RotateCcw, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { maintenance, users as usuariosApi, BACKEND_MODE, IS_LOCAL_MODE } from '../../services/api';
 import { estimateDataUrlBytes, formatBytes } from '../../lib/image';
@@ -145,7 +145,7 @@ export default function PanelDatos({ productos = [], pedidos = [], onRecargar })
       <header>
         <h1 className="titulo-seccion font-extrabold uppercase tracking-widest text-brand-500">Datos y Respaldo</h1>
         <p className="mt-1 text-sm text-gray-400">
-          Copias de seguridad, importación y restablecimiento de la demostración.
+          Copias de seguridad e importación del catálogo.
         </p>
       </header>
 
@@ -160,7 +160,7 @@ export default function PanelDatos({ productos = [], pedidos = [], onRecargar })
         ))}
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-6 ${IS_LOCAL_MODE ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
         {/* --------------------------------------------------------- export */}
         <section className="superficie space-y-4 rounded-xl p-5">
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-gray-300">
@@ -204,21 +204,17 @@ export default function PanelDatos({ productos = [], pedidos = [], onRecargar })
         </section>
 
         {/* ---------------------------------------------------------- reset */}
-        <section className="space-y-4 rounded-xl border border-red-900/50 bg-red-950/20 p-5">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-red-400">
-            <RotateCcw size={16} aria-hidden="true" /> Restablecer la demo
-          </h2>
-          <p className="text-xs leading-relaxed text-gray-400">
-            Borra por completo la base de este navegador y vuelve a sembrar el catálogo, las cuentas y los pedidos
-            de demostración. No hay vuelta atrás: exporta antes si te importa lo que hay.
-          </p>
-
-          {!IS_LOCAL_MODE ? (
-            <p className="flex items-start gap-2 text-[11px] font-bold text-amber-400">
-              <AlertTriangle size={14} className="mt-px shrink-0" aria-hidden="true" />
-              Con Supabase esta acción no está disponible desde el navegador.
+        {/* Sólo en modo local: con Supabase la tienda es real y no hay demo que restablecer. */}
+        {IS_LOCAL_MODE && (
+          <section className="space-y-4 rounded-xl border border-red-900/50 bg-red-950/20 p-5">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-red-400">
+              <RotateCcw size={16} aria-hidden="true" /> Restablecer la demo
+            </h2>
+            <p className="text-xs leading-relaxed text-gray-400">
+              Borra por completo la base de este navegador y vuelve a sembrar el catálogo, las cuentas y los
+              pedidos de demostración. No hay vuelta atrás: exporta antes si te importa lo que hay.
             </p>
-          ) : (
+
             <button
               type="button"
               onClick={pedirRestablecer}
@@ -227,8 +223,8 @@ export default function PanelDatos({ productos = [], pedidos = [], onRecargar })
             >
               <Database size={16} aria-hidden="true" /> Borrar y sembrar de nuevo
             </button>
-          )}
-        </section>
+          </section>
+        )}
       </div>
 
       <p className="flex items-start gap-3 rounded-lg border border-gray-800 bg-black/40 p-4 text-xs leading-relaxed text-gray-400">

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Banknote, Home, Megaphone, RotateCcw, Save, Share2, Store, Truck } from 'lucide-react';
+import { AlertTriangle, Banknote, Home, Megaphone, RotateCcw, Save, Scale, Share2, Store, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSettings } from '../../context/SettingsContext';
 import { sanitizeLinkUrl } from '../../lib/security';
 import { formatPrice } from '../../lib/pricing';
+import { datosLegales } from '../../lib/legal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { Skeleton } from '../ui/Skeleton';
 import { TextAreaField, TextField } from '../ui/Field';
@@ -102,6 +103,7 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
       social: Object.fromEntries(
         REDES.map((red) => [red.campo, sanitizeLinkUrl(String(datos.social[red.campo] || '').trim())])
       ),
+      legal: datos.legal,
       banner: datos.banner,
     };
 
@@ -135,6 +137,7 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
     }
   };
 
+  const faltanLegales = datosLegales(datos).pendientes;
   const envioGratisDesde = numero(datos.shipping.freeFrom);
   const costoEnvio = numero(datos.shipping.cost);
 
@@ -175,7 +178,7 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
         >
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
           <span>
-            <span className="font-bold uppercase tracking-widest">Datos bancarios de ejemplo.</span> Sustituye el
+            <span className="font-bold uppercase tracking-widest">Cuenta bancaria sin confirmar.</span> Sustituye el
             banco, la CLABE y el beneficiario por los reales —y desmarca la casilla— antes de aceptar el primer
             pago.
           </span>
@@ -274,10 +277,11 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
             />
             <span className="text-xs leading-relaxed text-gray-400">
               <span className="font-bold uppercase tracking-widest text-gray-300">
-                Estos son datos de ejemplo
+                La cuenta bancaria aún no es la definitiva
               </span>
               <br />
-              Mientras esté marcada, la tienda avisa a los clientes de que no deben transferir dinero.
+              Mientras esté marcada, el checkout avisa a los clientes de que no deben transferir dinero. Desmárcala
+              al capturar la cuenta real.
             </span>
           </label>
         </Bloque>
@@ -435,6 +439,48 @@ function FormularioAjustes({ inicial, onGuardar, onRestaurar }) {
               );
             })}
           </div>
+        </Bloque>
+
+        <Bloque
+          icono={Scale}
+          titulo="Datos legales"
+          descripcion="Aparecen en Términos, Aviso de privacidad y Devoluciones como quien vende y responde por los datos."
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <TextField
+              className="sm:col-span-2"
+              label="Razón social o nombre completo"
+              value={datos.legal.businessName}
+              onChange={cambiar('legal', 'businessName')}
+              hint="Como aparece en tu constancia de situación fiscal."
+            />
+            <TextField
+              label="RFC"
+              value={datos.legal.rfc}
+              onChange={cambiar('legal', 'rfc')}
+              inputClassName="font-mono uppercase"
+            />
+            <TextField
+              label="Correo para privacidad"
+              type="email"
+              value={datos.legal.privacyEmail}
+              onChange={cambiar('legal', 'privacyEmail')}
+              hint="Vacío = el correo de la tienda."
+            />
+            <TextField
+              className="sm:col-span-2"
+              label="Domicilio"
+              value={datos.legal.fiscalAddress}
+              onChange={cambiar('legal', 'fiscalAddress')}
+              hint="Calle, número, colonia, C.P., ciudad y estado. Vacío = la dirección de la tienda."
+            />
+          </div>
+          {faltanLegales.length > 0 && (
+            <p className="flex items-start gap-2 rounded-sm border border-amber-700/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>Falta: {faltanLegales.join(', ')}. La ley pide identificar a quien vende y trata los datos.</span>
+            </p>
+          )}
         </Bloque>
 
         <Bloque

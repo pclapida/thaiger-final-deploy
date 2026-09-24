@@ -68,20 +68,24 @@ export const DEFAULT_SETTINGS = {
     name: 'Thaiger Supplements',
     tagline: 'Suplementación deportiva de alto rendimiento',
     description:
-      'Tienda de demostración. Los productos, marcas, precios y datos de contacto de este sitio son de ejemplo.',
-    email: 'demo@thaiger.mx',
-    phone: '55 0000 0000',
-    whatsapp: '525500000000',
-    address: 'Calle Demo 000, Col. Ejemplo, CDMX',
+      'Suplementos deportivos originales con precios por volumen y envíos a toda la República Mexicana.',
+    // Vacíos hasta capturarlos en Ajustes: el pie oculta lo que no tenga valor.
+    email: '',
+    phone: '',
+    whatsapp: '',
+    address: '',
     hours: 'Lunes a viernes de 9:00 a 18:00',
     shippingNote: 'Envíos a toda la República Mexicana',
   },
 
-  /** Cuenta para transferencias SPEI. DATOS DE PRUEBA: cámbialos antes de vender. */
+  /**
+   * Cuenta para transferencias SPEI. Sin capturar todavía: mientras `isDemo`
+   * siga en true, el checkout avisa que no se transfiera a esta cuenta.
+   */
   payment: {
-    bank: 'BANCO DEMO',
+    bank: 'Por configurar',
     clabe: '000000000000000000',
-    beneficiary: 'Thaiger Supplements (DEMO)',
+    beneficiary: 'Thaiger Supplements',
     instructions:
       'Tu pedido se aparta al confirmarlo. Para procesarlo debes transferir el total a esta cuenta usando el concepto indicado.',
     isDemo: true,
@@ -144,10 +148,22 @@ export const DEFAULT_SETTINGS = {
     youtube: '',
   },
 
+  /**
+   * Quién vende, para las páginas legales (términos, aviso de privacidad,
+   * devoluciones). Vacío = se usa el nombre y la dirección de la tienda, y el
+   * panel avisa de que falta. Ver src/lib/legal.js.
+   */
+  legal: {
+    businessName: '',
+    rfc: '',
+    fiscalAddress: '',
+    privacyEmail: '',
+  },
+
   /** Aviso permanente en la barra superior. Vacío = no se muestra. */
   banner: {
-    text: 'Sitio de demostración: productos, precios y datos bancarios son de ejemplo.',
-    active: true,
+    text: '',
+    active: false,
   },
 };
 
@@ -178,6 +194,7 @@ export function withSettingsDefaults(saved) {
     tiers: { ...base.tiers, ...(saved.tiers || {}) },
     home: { ...base.home, ...(saved.home || {}) },
     social: { ...base.social, ...(saved.social || {}) },
+    legal: { ...base.legal, ...(saved.legal || {}) },
     banner: { ...base.banner, ...(saved.banner || {}) },
     hero: Array.isArray(saved.hero) && saved.hero.length > 0 ? saved.hero : base.hero,
   };
