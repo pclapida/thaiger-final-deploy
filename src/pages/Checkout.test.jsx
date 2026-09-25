@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Checkout from './Checkout';
 import ThaigerLogin from '../components/ThaigerLogin';
 import Register from './Register';
-import { auth, orders, products, DEMO_ADMIN } from '../services/localBackend';
+import { auth, orders, products, settings, shipping, DEMO_ADMIN } from '../services/localBackend';
 import { getUnitPrice, SHIPPING_COST } from '../lib/pricing';
-import { ponerEnCarrito, renderWithProviders, resetApp } from '../test/utils';
+import { entrarComoAdmin, ponerEnCarrito, renderWithProviders, resetApp } from '../test/utils';
 
 /** Un producto con inventario de sobra, para que la compra no choque con el stock. */
 async function productoDePrueba() {
@@ -217,5 +217,34 @@ describe('checkout', () => {
     // Y el aviso de que la cuenta no es la definitiva (el texto vive en un
     // <strong> dentro de un <p>, así que hay más de una coincidencia).
     expect(screen.getAllByText(/no transfieras dinero/i).length).toBeGreaterThan(0);
+  });
+
+  it('con paquetería conectada, cotiza sólo con la dirección completa y la manda', async () => {
+    const user = userEvent.setup();
+    await entrarComoAdmin();
+    await settings.update({ shipping: { ...(await settings.get()).shipping, provider: 'skydropx' } });
+    await auth.signOut();
+    await auth.signUp('envio@thaiger.mx', 'secreto123', 'Envío');
+    ponerEnCarrito(await productoDePrueba(), 1);
+    const cotizar = vi.spyOn(shipping, 'quote');
+
+    renderWithProviders(<Checkout />, { route: '/checkout' });
+    await screen.findByRole('heading', { name: /finalizar compra/i });
+    await user.type(screen.getByPlaceholderText('00000'), '64000');
+    await user.type(screen.getByLabelText(/colonia/i), 'Centro');
+    await user.type(screen.getByLabelText(/ciudad o municipio/i), 'Monterrey');
+
+    // Sin estado todavía: no se cotiza (Skydropx lo rechazaría con 422).
+    expect(await screen.findByText(/completa colonia, ciudad, estado y código postal/i)).toBeInTheDocument();
+    await new Promise((resolver) => setTimeout(resolver, 900));
+    expect(cotizar).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getByLabelText(/^estado/i), 'Nuevo León');
+    await waitFor(() =>
+      expect(cotizar).toHaveBeenCalledWith(
+        expect.objectContaining({ zip: '64000', neighborhood: 'Centro', city: 'Monterrey', state: 'Nuevo León' })
+      )
+    , { timeout: 3000 });
+    cotizar.mockRestore();
   });
 });

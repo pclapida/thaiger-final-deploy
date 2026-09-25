@@ -126,11 +126,17 @@ export default function Checkout() {
       : totales.shipping;
   const total = roundMoney(subtotal + envio);
 
-  // Se cotiza en cuanto hay un C.P. completo, con una pausa para no pedir una
-  // tarifa por cada dígito. Sin paquetería conectada no hace nada.
+  // Se cotiza en cuanto la dirección de destino está completa (C.P., colonia,
+  // ciudad y estado: Skydropx rechaza la cotización con 422 si falta alguno),
+  // con una pausa para no pedir una tarifa por cada tecla. Sin paquetería
+  // conectada no hace nada.
   const cp = soloDigitos(formulario.zip);
+  const colonia = formulario.neighborhood.trim();
+  const ciudad = formulario.city.trim();
+  const estado = formulario.state;
+  const destinoListo = cp.length === 5 && Boolean(colonia && ciudad && estado);
   useEffect(() => {
-    if (!cotizaEnvio || cp.length !== 5 || cartItems.length === 0) return undefined;
+    if (!cotizaEnvio || !destinoListo || cartItems.length === 0) return undefined;
 
     let vigente = true;
     const temporizador = setTimeout(async () => {
@@ -139,6 +145,9 @@ export default function Checkout() {
       try {
         const respuesta = await shippingApi.quote({
           zip: cp,
+          neighborhood: colonia,
+          city: ciudad,
+          state: estado,
           items: cartItems.map((item) => ({ product_id: item.id, quantity: item.quantity })),
         });
         if (!vigente) return;
@@ -154,13 +163,13 @@ export default function Checkout() {
           error: fallo?.message || 'No pudimos cotizar el envío.',
         });
       }
-    }, 600);
+    }, 800);
 
     return () => {
       vigente = false;
       clearTimeout(temporizador);
     };
-  }, [cotizaEnvio, cp, cartItems, reintentos]);
+  }, [cotizaEnvio, destinoListo, cp, colonia, ciudad, estado, cartItems, reintentos]);
 
   const errores = useMemo(() => validarEnvio(formulario), [formulario]);
   const envioCompleto = Object.keys(errores).length === 0;
@@ -421,17 +430,19 @@ export default function Checkout() {
                     <Truck size={16} className="text-brand-500" aria-hidden="true" /> Opciones de envío
                   </h3>
 
-                  {cp.length !== 5 && (
-                    <p className="text-sm text-gray-400">Escribe tu código postal para cotizar el envío.</p>
+                  {!destinoListo && (
+                    <p className="text-sm text-gray-400">
+                      Completa colonia, ciudad, estado y código postal para cotizar el envío.
+                    </p>
                   )}
 
-                  {cp.length === 5 && cotizacion.estado === 'cargando' && (
+                  {destinoListo && cotizacion.estado === 'cargando' && (
                     <p role="status" className="flex items-center gap-2 text-sm text-gray-400">
                       <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Cotizando con la paquetería...
                     </p>
                   )}
 
-                  {cp.length === 5 && cotizacion.estado === 'error' && (
+                  {destinoListo && cotizacion.estado === 'error' && (
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p role="alert" className="text-sm text-red-400">
                         {cotizacion.error}
@@ -446,7 +457,7 @@ export default function Checkout() {
                     </div>
                   )}
 
-                  {cotizacion.estado === 'lista' && (
+                  {destinoListo && cotizacion.estado === 'lista' && (
                     <fieldset className="space-y-2">
                       <legend className="sr-only">Elige cómo quieres recibir tu pedido</legend>
                       {cotizacion.rates.map((opcion) => (

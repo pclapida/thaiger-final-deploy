@@ -134,7 +134,7 @@ import { products, orders, auth, users, settings, maintenance,
 | `settings` | `get()` `update(patch)` `reset()` | lectura libre; escritura **admin** |
 | `maintenance` | `exportData()` `importData(backup)` `resetDemo()` | **admin** |
 | `payments` | `start(orderId)` → `{ init_point }` (Checkout Pro) | sesión; sólo Supabase |
-| `shipping` | `quote({ zip, items })` → `{ quote_id, rates }` · `createLabel(orderId, { rateId } \| { trackingNumber, carrier, trackingUrl })` | `quote` sesión; `createLabel` **admin** |
+| `shipping` | `quote({ zip, neighborhood, city, state, items })` → `{ quote_id, rates }` · `createLabel(orderId, { rateId } \| { trackingNumber, carrier, trackingUrl })` | `quote` sesión; `createLabel` **admin** |
 
 **`orders.create` no acepta precios.** Su firma es:
 
@@ -220,7 +220,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (325 pruebas, 25 archivos)
+npm test             # suite completa (327 pruebas, 25 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -427,7 +427,7 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (325 / 25) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (327 / 25) se actualizan a mano cuando
   cambian.
 - **Nunca uses `async` ni llames a Supabase dentro de
   `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de

@@ -1,5 +1,9 @@
 /**
- * POST /functions/v1/cotizar-envio   { zip, items: [{ product_id, quantity }] }
+ * POST /functions/v1/cotizar-envio
+ *   { zip, neighborhood, city, state, items: [{ product_id, quantity }] }
+ *
+ * Colonia, ciudad y estado del destino son obligatorios para la paquetería:
+ * Skydropx responde 422 si falta cualquiera (area_level1/2/3).
  *
  * Pide tarifas a la paquetería para el carrito y el código postal del cliente,
  * y las guarda en shipping_quotes con caducidad. El checkout enseña las
@@ -16,6 +20,9 @@ import { origenDeLaTienda, proveedorDeEnvios } from '../_shared/envios/index.ts'
 
 interface Cuerpo {
   zip?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
   items?: Array<{ product_id: number | string; quantity: number }>;
 }
 
@@ -28,13 +35,20 @@ Deno.serve(async (req) => {
     const usuario = await usuarioActual(req);
     if (!usuario) return fallo('Necesitas iniciar sesión para cotizar el envío.', 401);
 
-    const { zip, items } = await leerJson<Cuerpo>(req);
+    const { zip, items, neighborhood, city, state } = await leerJson<Cuerpo>(req);
+    const texto = (valor: unknown, max: number) => String(valor ?? '').trim().slice(0, max);
+    const colonia = texto(neighborhood, 80);
+    const ciudad = texto(city, 60);
+    const estado = texto(state, 40);
     const cp = String(zip ?? '').replace(/\D/g, '');
     if (cp.length !== 5) return fallo('El código postal debe tener 5 dígitos.');
     if (!Array.isArray(items) || items.length === 0) return fallo('El carrito está vacío.');
 
     const ajustes = await leerAjustes();
     const proveedor = proveedorDeEnvios(ajustes);
+    if (proveedor.nombre !== 'manual' && (!colonia || !ciudad || !estado)) {
+      return fallo('Completa colonia, ciudad y estado para cotizar el envío.');
+    }
 
     // Peso y medidas reales del catálogo, nunca los que mande el navegador.
     const admin = clienteAdmin();
@@ -57,7 +71,7 @@ Deno.serve(async (req) => {
 
     const cotizacion = await proveedor.cotizar({
       origen: origenDeLaTienda(ajustes),
-      destino: { zip: cp, country: 'MX' },
+      destino: { zip: cp, neighborhood: colonia, city: ciudad, state: estado, country: 'MX' },
       paquete: { ...paquete, declared_value: valorDeclarado, content: 'Suplementos alimenticios' },
     });
 

@@ -329,9 +329,13 @@ export const payments = {
 
 export const shipping = {
   /** Tarifas para el carrito y el C.P. Con proveedor manual, la tarifa fija. */
-  async quote({ zip, items }) {
+  /** `neighborhood`, `city` y `state` del destino: Skydropx no cotiza sin ellos. */
+  async quote({ zip, items, neighborhood, city, state }) {
     return invocarFuncion('cotizar-envio', {
       zip: String(zip ?? '').replace(/\D/g, ''),
+      neighborhood: sanitizeText(neighborhood, { maxLength: 80 }),
+      city: sanitizeText(city, { maxLength: 60 }),
+      state: sanitizeText(state, { maxLength: 40 }),
       items: (items || []).map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
     });
   },

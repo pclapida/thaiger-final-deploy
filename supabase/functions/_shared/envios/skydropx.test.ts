@@ -14,6 +14,19 @@ describe('mapeo hacia Skydropx', () => {
     expect(cuerpo.quotation.parcels).toEqual([{ length: 20, width: 15, height: 12, weight: 1.2 }]);
   });
 
+  it('manda estado, ciudad y colonia del destino (sin ellos Skydropx responde 422)', () => {
+    const cuerpo = armarCotizacion({
+      origen,
+      destino: { ...destino, neighborhood: 'Centro', state: 'Ciudad de México' },
+      paquete,
+    });
+    expect(cuerpo.quotation.address_to).toMatchObject({
+      area_level1: 'Ciudad de México',
+      area_level2: 'CDMX',
+      area_level3: 'Centro',
+    });
+  });
+
   it('arma el envío con la cotización, la tarifa y las dos direcciones completas', () => {
     const tarifa = { id: 'r1', carrier: 'Estafeta', service: 'Terrestre', amount: 150, currency: 'MXN', days: 3 };
     const cuerpo = armarEnvio({ cotizacion: { provider_quote_id: 'q1', rate: tarifa }, origen, destino, paquete });
