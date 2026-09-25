@@ -35,3 +35,37 @@ export function fotosDeProducto(producto) {
   const extra = normalizarGaleria(producto?.gallery, principal);
   return principal ? [principal, ...extra] : extra;
 }
+
+/**
+ * Pasa cada foto de un producto por `transformar(url)` —que devuelve la URL
+ * nueva, o `null` si esa foto se queda igual— y arma el cambio a guardar.
+ *
+ * Una foto que falla se queda como estaba: nunca se pierde una foto por un
+ * error a medio camino. Devuelve `{ cambio, cambiadas, fallidas }`; `cambio`
+ * es `null` si no hubo nada que guardar.
+ */
+export async function transformarFotos(producto, transformar) {
+  const principal = sanitizeImageUrl(producto?.image_url);
+  const nuevas = [];
+  let cambiadas = 0;
+  let fallidas = 0;
+
+  for (const url of fotosDeProducto(producto)) {
+    try {
+      const nueva = await transformar(url);
+      if (nueva) {
+        nuevas.push(nueva);
+        cambiadas += 1;
+      } else {
+        nuevas.push(url);
+      }
+    } catch {
+      nuevas.push(url);
+      fallidas += 1;
+    }
+  }
+
+  if (cambiadas === 0) return { cambio: null, cambiadas, fallidas };
+  const cambio = principal ? { image_url: nuevas[0], gallery: nuevas.slice(1) } : { gallery: nuevas };
+  return { cambio, cambiadas, fallidas };
+}

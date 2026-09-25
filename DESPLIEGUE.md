@@ -91,7 +91,9 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
    **Fotos.** Cada producto lleva una foto principal y hasta 8 adicionales
    (columna `gallery`). Al subirlas, la casilla «Quitar el fondo blanco» pasa a
    negro el blanco que toca los bordes, para que no se vean recuadros sobre la
-   tienda negra; desmárcala si una foto sale recortada de más.
+   tienda negra; desmárcala si una foto sale recortada de más. Para las fotos
+   que ya estaban puestas: `/dashboard → Productos → Fondo negro a fotos`
+   (todo el catálogo, o sólo lo seleccionado).
 
    **Cuentas del equipo.** Supabase → **Authentication → Users → Add user →
    Create new user**, con «Auto Confirm User» marcado. Luego, en

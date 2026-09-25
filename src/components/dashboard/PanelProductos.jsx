@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Copy,
   Edit,
+  Eraser,
   ImageIcon,
   Package,
   Percent,
@@ -19,6 +20,8 @@ import {
 import toast from 'react-hot-toast';
 import { products as productosApi } from '../../services/api';
 import { applyDiscount, formatPrice } from '../../lib/pricing';
+import { fotosDeProducto, transformarFotos } from '../../lib/galeria';
+import { fotoSinFondoDesdeUrl } from '../../lib/image';
 import ProductFormModal from '../ProductFormModal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
@@ -370,6 +373,74 @@ export default function PanelProductos({
     }
   };
 
+  /**
+   * Fondo negro a las fotos que ya estaban puestas (las nuevas lo llevan al
+   * subirlas). Cada foto se descarga, se procesa en este navegador y se vuelve
+   * a subir; las que no tienen fondo blanco no se tocan, y una que falla se
+   * queda como estaba. Los archivos originales siguen en Storage.
+   */
+  const quitarFondos = async (lista) => {
+    const aviso = toast.loading(`Procesando fotos… 0 de ${lista.length} productos`);
+    let productosCambiados = 0;
+    let fotosCambiadas = 0;
+    let fallidas = 0;
+
+    for (const [indice, producto] of lista.entries()) {
+      const resultado = await transformarFotos(producto, async (url) => {
+        const archivo = await fotoSinFondoDesdeUrl(url);
+        return archivo ? productosApi.uploadImage(archivo) : null;
+      });
+      fallidas += resultado.fallidas;
+
+      if (resultado.cambio) {
+        try {
+          const actualizado = await productosApi.update(producto.id, resultado.cambio);
+          onCambiarProductos?.((previos) =>
+            previos.map((p) => (String(p.id) === String(producto.id) ? { ...p, ...actualizado } : p))
+          );
+          productosCambiados += 1;
+          fotosCambiadas += resultado.cambiadas;
+        } catch {
+          fallidas += resultado.cambiadas;
+        }
+      }
+      toast.loading(`Procesando fotos… ${indice + 1} de ${lista.length} productos`, { id: aviso });
+    }
+
+    const cuenta = (n, singular, plural) => `${n} ${n === 1 ? singular : plural}`;
+    const resumen =
+      fotosCambiadas > 0
+        ? `${cuenta(fotosCambiadas, 'foto pasó', 'fotos pasaron')} a fondo negro en ${cuenta(productosCambiados, 'producto', 'productos')}.`
+        : 'Ninguna foto tenía fondo blanco que quitar.';
+    const extra = fallidas > 0 ? ` ${cuenta(fallidas, 'no se pudo procesar y quedó igual', 'no se pudieron procesar y quedaron igual')}.` : '';
+    toast.success(`${resumen}${extra}`, {
+      id: aviso,
+      duration: 8000,
+    });
+  };
+
+  const pedirQuitarFondos = () => {
+    const objetivo = seleccion.length > 0 ? productos.filter((p) => seleccionados.has(String(p.id))) : productos;
+    const conFotos = objetivo.filter((p) => fotosDeProducto(p).length > 0);
+    if (conFotos.length === 0) {
+      toast.error('No hay fotos que procesar.');
+      return;
+    }
+
+    setConfirmacion({
+      titulo: 'Fondo negro a las fotos',
+      mensaje: `Se revisarán las fotos de ${conFotos.length} ${
+        seleccion.length > 0 ? 'productos seleccionados' : 'productos'
+      }. Las que tengan fondo blanco se guardan de nuevo con fondo negro; las demás se quedan igual. Tarda unos segundos por producto: no cierres esta página mientras avanza.`,
+      etiqueta: 'Sí, procesar',
+      tono: 'warning',
+      accion: async () => {
+        setConfirmacion(null);
+        await quitarFondos(conFotos);
+      },
+    });
+  };
+
   const renombrar = async () => {
     if (!renombrando) return;
     const destino = nombreNuevo.trim();
@@ -414,6 +485,10 @@ export default function PanelProductos({
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => onRecargar?.()} className={BOTON_SECUNDARIO}>
             <RefreshCw size={16} aria-hidden="true" /> Recargar
+          </button>
+          <button type="button" onClick={pedirQuitarFondos} disabled={trabajando} className={BOTON_SECUNDARIO}>
+            <Eraser size={16} aria-hidden="true" />
+            {seleccion.length > 0 ? `Fondo negro (${seleccion.length})` : 'Fondo negro a fotos'}
           </button>
           <button type="button" onClick={abrirNuevo} className={BOTON_MARCA}>
             <Plus size={16} aria-hidden="true" /> Añadir Producto
@@ -1093,7 +1168,7 @@ export default function PanelProductos({
         title={confirmacion?.titulo}
         message={confirmacion?.mensaje}
         confirmLabel={confirmacion?.etiqueta}
-        tone="danger"
+        tone={confirmacion?.tono || 'danger'}
         busy={trabajando}
         onConfirm={confirmar}
         onCancel={() => setConfirmacion(null)}

@@ -145,8 +145,9 @@ export function quitarFondoClaro(pixeles, ancho, alto, { tolerancia = 28 } = {})
 
 /**
  * Dibuja la foto redimensionada sobre negro (el fondo de la tienda) y, si se
- * pide, le quita el fondo blanco. Devuelve el canvas o lanza si el navegador
- * no puede decodificarla.
+ * pide, le quita el fondo blanco. Devuelve `{ canvas, pintados }` (cuántos
+ * píxeles de fondo cambió) o lanza si el navegador no puede decodificarla.
+ * Acepta un File o un Blob.
  */
 async function dibujarFoto(file, { maxSize, quitarFondo }) {
   const bitmap = await createImageBitmap(file);
@@ -162,11 +163,13 @@ async function dibujarFoto(file, { maxSize, quitarFondo }) {
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close?.();
 
+  let pintados = 0;
   if (quitarFondo) {
     const imagen = ctx.getImageData(0, 0, width, height);
-    if (quitarFondoClaro(imagen.data, width, height) > 0) ctx.putImageData(imagen, 0, 0);
+    pintados = quitarFondoClaro(imagen.data, width, height);
+    if (pintados > 0) ctx.putImageData(imagen, 0, 0);
   }
-  return canvas;
+  return { canvas, pintados };
 }
 
 /** ¿El navegador sabe escribir WebP? Se comprueba una sola vez. */
@@ -200,7 +203,7 @@ export async function fileToOptimizedDataUrl(file, { maxSize = 900, quality = 0.
   if (file.type === 'image/gif') return original;
 
   try {
-    const canvas = await dibujarFoto(file, { maxSize, quitarFondo });
+    const { canvas } = await dibujarFoto(file, { maxSize, quitarFondo });
 
     const candidatos = [canvas.toDataURL('image/jpeg', quality)];
     if (supportsWebp(canvas)) candidatos.push(canvas.toDataURL('image/webp', quality));
@@ -229,7 +232,7 @@ export async function fileToOptimizedBlob(file, { maxSize = 1600, quality = 0.88
   if (file.type === 'image/gif') return null;
 
   try {
-    const canvas = await dibujarFoto(file, { maxSize, quitarFondo });
+    const { canvas } = await dibujarFoto(file, { maxSize, quitarFondo });
     const webp = await canvasABlob(canvas, 'image/webp', quality);
     if (webp?.type === 'image/webp') return { blob: webp, extension: 'webp' };
     const jpeg = await canvasABlob(canvas, 'image/jpeg', quality);
@@ -237,4 +240,28 @@ export async function fileToOptimizedBlob(file, { maxSize = 1600, quality = 0.88
   } catch {
     return null;
   }
+}
+
+/**
+ * Para las fotos que YA están puestas: descarga la foto, le quita el fondo
+ * blanco y devuelve un File listo para volver a subir. Devuelve `null` si no
+ * había fondo que quitar o si no es una foto que se pueda procesar (SVG, GIF),
+ * para no volver a subir en balde. Lanza si no se puede descargar (por
+ * ejemplo, una dirección de otro sitio que no lo permite).
+ */
+export async function fotoSinFondoDesdeUrl(url, { maxSize = 1600, quality = 0.88 } = {}) {
+  const respuesta = await fetch(url);
+  if (!respuesta.ok) throw new Error(`No se pudo descargar la foto (${respuesta.status}).`);
+  const blob = await respuesta.blob();
+  if (!/^image\/(jpeg|jpg|png|webp|avif)$/i.test(blob.type)) return null;
+
+  const { canvas, pintados } = await dibujarFoto(blob, { maxSize, quitarFondo: true });
+  if (pintados === 0) return null;
+
+  const webp = await canvasABlob(canvas, 'image/webp', quality);
+  const final = webp?.type === 'image/webp' ? webp : await canvasABlob(canvas, 'image/jpeg', quality);
+  if (!final) return null;
+
+  const extension = final.type === 'image/webp' ? 'webp' : 'jpg';
+  return new File([final], `sin-fondo.${extension}`, { type: final.type });
 }

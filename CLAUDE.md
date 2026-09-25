@@ -220,7 +220,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (312 pruebas, 23 archivos)
+npm test             # suite completa (316 pruebas, 23 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -427,7 +427,7 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (312 / 23) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (316 / 23) se actualizan a mano cuando
   cambian.
 - **Nunca uses `async` ni llames a Supabase dentro de
   `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MAX_FOTOS_EXTRA, fotosDeProducto, normalizarGaleria } from './galeria';
+import { MAX_FOTOS_EXTRA, fotosDeProducto, normalizarGaleria, transformarFotos } from './galeria';
 
 const foto = (n) => `https://cdn.thaiger.mx/p/${n}.webp`;
 
@@ -30,5 +30,38 @@ describe('galería de producto', () => {
     expect(fotosDeProducto({ image_url: foto(1), gallery: [foto(2), foto(1)] })).toEqual([foto(1), foto(2)]);
     expect(fotosDeProducto({ image_url: null, gallery: [foto(2)] })).toEqual([foto(2)]);
     expect(fotosDeProducto({})).toEqual([]);
+  });
+});
+
+describe('transformar las fotos de un producto', () => {
+  const producto = { image_url: foto(1), gallery: [foto(2), foto(3)] };
+
+  it('cambia sólo las que el transformador devuelve y conserva el orden', async () => {
+    const { cambio, cambiadas, fallidas } = await transformarFotos(producto, async (url) =>
+      url === foto(2) ? null : `${url}?negro`
+    );
+    expect(cambio).toEqual({ image_url: `${foto(1)}?negro`, gallery: [foto(2), `${foto(3)}?negro`] });
+    expect(cambiadas).toBe(2);
+    expect(fallidas).toBe(0);
+  });
+
+  it('una foto que falla se queda como estaba', async () => {
+    const { cambio, fallidas } = await transformarFotos(producto, async (url) => {
+      if (url === foto(1)) throw new Error('sin permiso');
+      return `${url}?negro`;
+    });
+    expect(cambio.image_url).toBe(foto(1));
+    expect(cambio.gallery).toEqual([`${foto(2)}?negro`, `${foto(3)}?negro`]);
+    expect(fallidas).toBe(1);
+  });
+
+  it('sin cambios no hay nada que guardar', async () => {
+    const { cambio } = await transformarFotos(producto, async () => null);
+    expect(cambio).toBeNull();
+  });
+
+  it('sin foto principal, todo va a la galería', async () => {
+    const { cambio } = await transformarFotos({ image_url: null, gallery: [foto(2)] }, async (url) => `${url}?negro`);
+    expect(cambio).toEqual({ gallery: [`${foto(2)}?negro`] });
   });
 });
