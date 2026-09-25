@@ -15,6 +15,7 @@ import {
   Search,
   Tags,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -27,6 +28,32 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 import EmptyState from '../ui/EmptyState';
 import { SkeletonRows } from '../ui/Skeleton';
 import { inputClasses } from '../ui/Field';
+
+/**
+ * Respaldo de la última pasada de «Fondo negro a fotos»: las fotos que tenía
+ * cada producto antes, para poder deshacerla. Vive en este navegador; los
+ * archivos originales siguen en Storage, así que regresar es sólo volver a
+ * apuntar a ellos.
+ */
+const CLAVE_RESPALDO_FONDO = 'thaiger_respaldo_fondo_negro';
+
+function leerRespaldoFondo() {
+  try {
+    const guardado = JSON.parse(window.localStorage.getItem(CLAVE_RESPALDO_FONDO) || 'null');
+    return Array.isArray(guardado?.productos) && guardado.productos.length > 0 ? guardado : null;
+  } catch {
+    return null;
+  }
+}
+
+function escribirRespaldoFondo(respaldo) {
+  try {
+    if (respaldo) window.localStorage.setItem(CLAVE_RESPALDO_FONDO, JSON.stringify(respaldo));
+    else window.localStorage.removeItem(CLAVE_RESPALDO_FONDO);
+  } catch {
+    /* sin almacenamiento no hay deshacer, pero el proceso sigue */
+  }
+}
 
 /** Filas por página. Con cientos de productos, pintarlas todas es inmanejable. */
 const POR_PAGINA = 25;
@@ -104,6 +131,7 @@ export default function PanelProductos({
   const [seleccion, setSeleccion] = useState([]);
   const [trabajando, setTrabajando] = useState(false);
   const [confirmacion, setConfirmacion] = useState(null);
+  const [respaldoFondo, setRespaldoFondo] = useState(leerRespaldoFondo);
 
   const [gestorAbierto, setGestorAbierto] = useState(false);
   const [renombrando, setRenombrando] = useState(null);
@@ -384,6 +412,7 @@ export default function PanelProductos({
     let productosCambiados = 0;
     let fotosCambiadas = 0;
     let fallidas = 0;
+    const antes = [];
 
     for (const [indice, producto] of lista.entries()) {
       const resultado = await transformarFotos(producto, async (url) => {
@@ -395,6 +424,12 @@ export default function PanelProductos({
       if (resultado.cambio) {
         try {
           const actualizado = await productosApi.update(producto.id, resultado.cambio);
+          antes.push({
+            id: producto.id,
+            name: producto.name,
+            image_url: producto.image_url ?? null,
+            gallery: Array.isArray(producto.gallery) ? producto.gallery : [],
+          });
           onCambiarProductos?.((previos) =>
             previos.map((p) => (String(p.id) === String(producto.id) ? { ...p, ...actualizado } : p))
           );
@@ -405,6 +440,12 @@ export default function PanelProductos({
         }
       }
       toast.loading(`Procesando fotos… ${indice + 1} de ${lista.length} productos`, { id: aviso });
+    }
+
+    if (antes.length > 0) {
+      const respaldo = { fecha: new Date().toISOString(), productos: antes };
+      escribirRespaldoFondo(respaldo);
+      setRespaldoFondo(respaldo);
     }
 
     const cuenta = (n, singular, plural) => `${n} ${n === 1 ? singular : plural}`;
@@ -437,6 +478,48 @@ export default function PanelProductos({
       accion: async () => {
         setConfirmacion(null);
         await quitarFondos(conFotos);
+      },
+    });
+  };
+
+  /** Regresa cada producto de la última pasada a las fotos que tenía antes. */
+  const deshacerFondos = async () => {
+    const respaldo = respaldoFondo;
+    if (!respaldo) return;
+    let regresados = 0;
+    let fallidos = 0;
+    for (const previo of respaldo.productos) {
+      try {
+        const actualizado = await productosApi.update(previo.id, { image_url: previo.image_url, gallery: previo.gallery });
+        onCambiarProductos?.((lista) =>
+          lista.map((p) => (String(p.id) === String(previo.id) ? { ...p, ...actualizado } : p))
+        );
+        regresados += 1;
+      } catch {
+        fallidos += 1;
+      }
+    }
+    escribirRespaldoFondo(null);
+    setRespaldoFondo(null);
+    const productos = (n) => `${n} ${n === 1 ? 'producto' : 'productos'}`;
+    if (fallidos > 0) {
+      toast.error(`${productos(regresados)} de vuelta; ${productos(fallidos)} ya no existen o no se pudieron regresar.`);
+    } else {
+      toast.success(`${productos(regresados)} de vuelta con sus fotos anteriores.`);
+    }
+  };
+
+  const pedirDeshacerFondos = () => {
+    if (!respaldoFondo) return;
+    const cantidad = respaldoFondo.productos.length;
+    setConfirmacion({
+      titulo: 'Deshacer el fondo negro',
+      mensaje: `${cantidad} ${cantidad === 1 ? 'producto regresa' : 'productos regresan'} a las fotos que tenían antes de la última pasada de «Fondo negro a fotos». Si después de eso cambiaste alguna de sus fotos a mano, ese cambio también se deshace.`,
+      etiqueta: 'Sí, deshacer',
+      tono: 'warning',
+      accion: async () => {
+        setConfirmacion(null);
+        await deshacerFondos();
       },
     });
   };
@@ -490,6 +573,11 @@ export default function PanelProductos({
             <Eraser size={16} aria-hidden="true" />
             {seleccion.length > 0 ? `Fondo negro (${seleccion.length})` : 'Fondo negro a fotos'}
           </button>
+          {respaldoFondo && (
+            <button type="button" onClick={pedirDeshacerFondos} disabled={trabajando} className={BOTON_SECUNDARIO}>
+              <Undo2 size={16} aria-hidden="true" /> Deshacer fondo negro ({respaldoFondo.productos.length})
+            </button>
+          )}
           <button type="button" onClick={abrirNuevo} className={BOTON_MARCA}>
             <Plus size={16} aria-hidden="true" /> Añadir Producto
           </button>

@@ -91,6 +91,32 @@ describe('quitar el fondo blanco', () => {
     expect(color(pixeles, 10, 5, 5)).toEqual(BLANCO);
   });
 
+  it('un producto blanco con contorno tenue no se pinta de negro (el relleno no se cuela)', () => {
+    // Bote casi blanco (248) con contorno gris claro (232) y un hueco en el
+    // contorno: con la primera versión el relleno entraba por ahí y el bote
+    // quedaba negro.
+    const pixeles = lienzo(40, 40, (x, y) => {
+      const dentro = x > 10 && x < 30 && y > 6 && y < 34;
+      const borde = dentro && (x < 12 || x > 28 || y < 8 || y > 32);
+      const hueco = y > 18 && y < 21 && x === 11;
+      if (hueco) return [250, 250, 250, 255];
+      if (borde) return [232, 232, 232, 255];
+      if (dentro) return [248, 248, 248, 255];
+      return BLANCO;
+    });
+
+    expect(quitarFondoClaro(pixeles, 40, 40)).toBeGreaterThan(0);
+    expect(color(pixeles, 40, 20, 20)).toEqual([248, 248, 248, 255]);
+    expect(color(pixeles, 40, 0, 0)).toEqual([0, 0, 0, 255]);
+  });
+
+  it('si el producto es tan blanco como el fondo, no toca la foto', () => {
+    // Sin contorno: no hay forma de separar producto y fondo.
+    const pixeles = lienzo(40, 40, (x, y) => (x > 10 && x < 30 && y > 6 && y < 34 && y % 7 === 0 ? [30, 30, 30, 255] : BLANCO));
+    expect(quitarFondoClaro(pixeles, 40, 40)).toBe(0);
+    expect(color(pixeles, 40, 0, 0)).toEqual(BLANCO);
+  });
+
   it('una foto sin fondo blanco se queda igual', () => {
     const pixeles = lienzo(6, 6, () => NARANJA);
     expect(quitarFondoClaro(pixeles, 6, 6)).toBe(0);

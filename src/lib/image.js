@@ -56,23 +56,12 @@ export function formatBytes(bytes) {
 }
 
 /**
- * Pinta de negro el fondo claro que toca los bordes de una foto.
- *
- * Las fotos de proveedor casi siempre vienen sobre blanco, y la tienda es
- * negra: el recuadro blanco se ve como un parche. El recorrido parte del
- * contorno y avanza hacia dentro (relleno por inundación), así que sólo
- * cambia el blanco CONECTADO con el borde: la etiqueta blanca de un bote,
- * rodeada por el propio bote, se queda como está. Lo transparente también
- * cuenta como fondo.
- *
- * Modifica `pixeles` (RGBA, como `ImageData.data`) y devuelve cuántos píxeles
- * pintó. Si casi toda la foto parece fondo (un producto blanco pegado al
- * borde, por ejemplo), no toca nada: mejor el blanco que una foto negra.
+ * Relleno por inundación desde el contorno: marca en `visto` los píxeles de
+ * fondo (casi blancos, o transparentes) CONECTADOS con el borde. Devuelve la
+ * cola de los marcados y cuántos son.
  */
-export function quitarFondoClaro(pixeles, ancho, alto, { tolerancia = 28 } = {}) {
+function inundarFondo(pixeles, ancho, alto, tolerancia) {
   const total = ancho * alto;
-  if (!total) return 0;
-
   const esFondo = (i) => {
     const o = i * 4;
     if (pixeles[o + 3] < 16) return true;
@@ -80,7 +69,7 @@ export function quitarFondoClaro(pixeles, ancho, alto, { tolerancia = 28 } = {})
     const g = pixeles[o + 1];
     const b = pixeles[o + 2];
     const minimo = Math.min(r, g, b);
-    return minimo >= 255 - tolerancia && Math.max(r, g, b) - minimo <= 20;
+    return minimo >= 255 - tolerancia && Math.max(r, g, b) - minimo <= 12;
   };
 
   const visto = new Uint8Array(total);
@@ -110,9 +99,62 @@ export function quitarFondoClaro(pixeles, ancho, alto, { tolerancia = 28 } = {})
     if (i >= ancho) sembrar(i - ancho);
     if (i < total - ancho) sembrar(i + ancho);
   }
+  return { visto, cola, fin };
+}
 
-  if (fin === 0 || fin / total > 0.97) return 0;
+/**
+ * ¿El relleno se coló al producto? En una foto de catálogo el producto ocupa
+ * el centro: si el «fondo» cubre buena parte del recuadro central, lo que se
+ * inundó fue el producto (uno blanco con el contorno tenue, por ejemplo).
+ */
+function seColoAlCentro(visto, ancho, alto) {
+  const x0 = Math.floor(ancho * 0.35);
+  const x1 = Math.ceil(ancho * 0.65);
+  const y0 = Math.floor(alto * 0.35);
+  const y1 = Math.ceil(alto * 0.65);
+  let marcados = 0;
+  let total = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      total += 1;
+      if (visto[y * ancho + x]) marcados += 1;
+    }
+  }
+  return total > 0 && marcados / total > 0.2;
+}
 
+/**
+ * Pinta de negro el fondo blanco que rodea al producto en una foto.
+ *
+ * Las fotos de proveedor casi siempre vienen sobre blanco, y la tienda es
+ * negra: el recuadro blanco se ve como un parche. Sólo cambia el blanco
+ * CONECTADO con el borde: la etiqueta blanca de un bote, rodeada por el propio
+ * bote, se queda como está. Lo transparente también cuenta como fondo.
+ *
+ * Con productos blancos o muy claros el relleno podía colarse por un hueco del
+ * contorno y pintar el producto de negro. Ahora sólo cuenta como fondo el
+ * blanco casi puro, y si aun así el relleno llega al centro de la foto se
+ * reintenta más estricto; si sigue colándose, la foto se deja como está.
+ *
+ * Modifica `pixeles` (RGBA, como `ImageData.data`) y devuelve cuántos píxeles
+ * pintó (0 = no tocó nada).
+ */
+export function quitarFondoClaro(pixeles, ancho, alto, { tolerancias = [10, 3] } = {}) {
+  const total = ancho * alto;
+  if (!total) return 0;
+
+  let relleno = null;
+  for (const tolerancia of tolerancias) {
+    const intento = inundarFondo(pixeles, ancho, alto, tolerancia);
+    if (intento.fin === 0) return 0;
+    if (intento.fin / total <= 0.97 && !seColoAlCentro(intento.visto, ancho, alto)) {
+      relleno = intento;
+      break;
+    }
+  }
+  if (!relleno) return 0;
+
+  const { visto, cola, fin } = relleno;
   for (let k = 0; k < fin; k += 1) {
     const o = cola[k] * 4;
     pixeles[o] = 0;
@@ -132,8 +174,8 @@ export function quitarFondoClaro(pixeles, ancho, alto, { tolerancia = 28 } = {})
       visto[v] = 2;
       const o = v * 4;
       const minimo = Math.min(pixeles[o], pixeles[o + 1], pixeles[o + 2]);
-      if (minimo <= 180) continue;
-      const factor = 1 - (minimo - 180) / (255 - 180);
+      if (minimo <= 200) continue;
+      const factor = 1 - (minimo - 200) / (255 - 200);
       pixeles[o] = Math.round(pixeles[o] * factor);
       pixeles[o + 1] = Math.round(pixeles[o + 1] * factor);
       pixeles[o + 2] = Math.round(pixeles[o + 2] * factor);
