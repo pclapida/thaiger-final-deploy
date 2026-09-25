@@ -267,6 +267,10 @@ export default function Footer() {
           </div>
           <p className="text-[11px] uppercase tracking-[0.3em] text-gray-400">
             Desarrollada por <span className="font-bold text-white">José Hernández</span>
+            <span aria-hidden="true" className="mx-2 text-brand-500">
+              ·
+            </span>
+            Dedicada a <span className="font-bold text-white">Ale</span>
           </p>
         </div>
       </div>
