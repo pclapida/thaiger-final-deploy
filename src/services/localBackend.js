@@ -377,6 +377,24 @@ export const products = {
   },
 
   /** En modo local la foto se guarda incrustada como data URL. */
+  /**
+   * En modo local no hay un almacén de archivos aparte: las fotos viven dentro
+   * de cada producto. Se devuelven todas las que usa el catálogo, sin repetir.
+   */
+  async listImages() {
+    await ensureSeeded();
+    const vistas = new Set();
+    const fotos = [];
+    for (const producto of sortByIdDesc(await idb.getAll('products'))) {
+      for (const url of [producto.image_url, ...(Array.isArray(producto.gallery) ? producto.gallery : [])]) {
+        if (!url || vistas.has(url)) continue;
+        vistas.add(url);
+        fotos.push({ url, nombre: producto.name, fecha: null });
+      }
+    }
+    return fotos;
+  },
+
   /** `quitarFondo`: pasa a negro el fondo blanco de la foto (ver lib/image.js). */
   async uploadImage(file, { quitarFondo = false } = {}) {
     return fileToOptimizedDataUrl(file, { quitarFondo });

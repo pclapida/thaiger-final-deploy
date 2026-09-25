@@ -6,6 +6,7 @@ import { Field, TextAreaField, TextField, inputClasses } from './ui/Field';
 import { formatPrice, getDisplayPrice, getDiscountPercent, hasDiscount } from '../lib/pricing';
 import { buildProductPayload } from '../lib/productForm';
 import { MAX_FOTOS_EXTRA } from '../lib/galeria';
+import SelectorFotosSubidas from './SelectorFotosSubidas';
 
 const FORMULARIO_VACIO = {
   name: '',
@@ -95,6 +96,7 @@ export default function ProductFormModal({
   categorias = [],
   guardando = false,
   onSubirImagen,
+  onListarFotos,
   onGuardar,
   onCerrar,
 }) {
@@ -680,6 +682,26 @@ export default function ProductFormModal({
               )}
             </ul>
           </fieldset>
+
+          {onListarFotos && (
+            <SelectorFotosSubidas
+              onListar={onListarFotos}
+              enUso={[form.image_url, ...form.gallery]}
+              puedeAgregarExtra={form.gallery.length < MAX_FOTOS_EXTRA}
+              onUsarPrincipal={(url) => {
+                setForm((prev) => ({ ...prev, image_url: url, gallery: prev.gallery.filter((g) => g !== url) }));
+                toast.success('Foto principal cambiada. Guarda el producto para aplicarlo.');
+              }}
+              onAgregarExtra={(url) => {
+                setForm((prev) =>
+                  prev.gallery.includes(url) || prev.gallery.length >= MAX_FOTOS_EXTRA
+                    ? prev
+                    : { ...prev, gallery: [...prev.gallery, url] }
+                );
+                toast.success('Foto agregada. Guarda el producto para aplicarlo.');
+              }}
+            />
+          )}
 
           {/* Cómo se verá en la tienda. Decorativo: no compite con el formulario. */}
           <div className="space-y-3">

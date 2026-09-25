@@ -190,6 +190,24 @@ export const products = {
   },
 
   /**
+   * Las fotos guardadas en el bucket del catálogo, de la más reciente a la más
+   * antigua: `[{ url, nombre, fecha }]`. Incluye las originales que quedaron
+   * al pasar fotos a fondo negro, para poder regresarlas.
+   */
+  async listImages() {
+    const bucket = supabase.storage.from(IMAGE_BUCKET);
+    const { data, error } = await bucket.list('', { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) throw new Error(`No se pudieron leer las fotos: ${error.message}`);
+    return (data || [])
+      .filter((archivo) => archivo.id && /\.(jpe?g|png|webp|avif|gif)$/i.test(archivo.name))
+      .map((archivo) => ({
+        url: bucket.getPublicUrl(archivo.name).data.publicUrl,
+        nombre: archivo.name,
+        fecha: archivo.created_at ?? null,
+      }));
+  },
+
+  /**
    * Sube la foto ya redimensionada (WebP) y, con `quitarFondo`, con el fondo
    * blanco pasado a negro. Antes subía el archivo tal cual: fotos de varios MB
    * que tardaban en cargar en el celular.

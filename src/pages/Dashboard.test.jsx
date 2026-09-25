@@ -174,6 +174,30 @@ describe('panel de administración', () => {
     expect((await products.list()).find((p) => p.name === SUJETO.name).stock).toBe(7);
   });
 
+  it('regresa una foto ya subida como principal desde «Elegir de fotos ya subidas»', async () => {
+    const user = userEvent.setup();
+    // En modo local la lista son las fotos del catálogo, de la más nueva a la más vieja.
+    const lista = await products.listImages();
+    const sujeto = (await products.list()).find((p) => p.name === SUJETO.name);
+    const indice = lista.findIndex((f) => f.url !== sujeto.image_url);
+    const otra = { image_url: lista[indice].url };
+    renderWithProviders(<Dashboard />);
+    await abrirPestanaProductos(user, { filtrar: SUJETO.name });
+    await waitFor(() => expect(screen.getByText(/1 resultados?/i)).toBeInTheDocument());
+
+    await user.click(screen.getAllByTitle('Editar')[0]);
+    await screen.findByRole('heading', { name: /editar producto/i });
+
+    await user.click(screen.getByRole('button', { name: /elegir de fotos ya subidas/i }));
+    const botones = await screen.findAllByRole('button', { name: /usar como principal la foto/i });
+    await user.click(botones[indice]);
+    expect(screen.getByAltText(/vista previa/i)).toHaveAttribute('src', otra.image_url);
+
+    await user.click(screen.getByRole('button', { name: /guardar cambios/i }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /editar producto/i })).toBeNull());
+    expect((await products.list()).find((p) => p.name === SUJETO.name).image_url).toBe(otra.image_url);
+  });
+
   it('activa y desactiva una oferta desde la tabla', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Dashboard />);

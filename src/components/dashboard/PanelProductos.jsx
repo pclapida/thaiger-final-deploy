@@ -1247,6 +1247,7 @@ export default function PanelProductos({
         categorias={categorias}
         guardando={guardando}
         onSubirImagen={productosApi.uploadImage}
+        onListarFotos={productosApi.listImages}
         onGuardar={guardar}
         onCerrar={cerrarModal}
       />
