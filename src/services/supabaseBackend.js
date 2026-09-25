@@ -20,6 +20,8 @@ import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data
 // el resumen del carrito coincida con lo que va a cobrar el servidor.
 import { configurePricing } from '../lib/pricing';
 import { normalizarRol } from '../lib/roles';
+import { normalizarGaleria } from '../lib/galeria';
+import { fileToOptimizedBlob } from '../lib/image';
 import {
   isValidEmail,
   normalizeEmail,
@@ -66,6 +68,7 @@ function sanitizeProductPayload(data) {
     price2: price2 > 0 ? price2 : price1,
     price3: price3 > 0 ? price3 : price1,
     image_url: sanitizeImageUrl(data.image_url),
+    gallery: normalizarGaleria(data.gallery, sanitizeImageUrl(data.image_url)),
     stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0,
     is_on_sale: Boolean(data.is_on_sale),
     discount_percent: data.is_on_sale && discount > 0 && discount < 100 ? Math.round(discount) : 0,
@@ -79,6 +82,28 @@ function sanitizeProductPayload(data) {
 function medidaPositiva(valor, defecto) {
   const n = Math.round(Number(valor));
   return Number.isFinite(n) && n > 0 ? n : defecto;
+}
+
+/**
+ * La columna `gallery` llegó después que el resto del esquema. En una base
+ * que aún no la tiene, mandarla hace fallar CUALQUIER guardado de producto.
+ * Por eso sólo viaja si trae fotos o si la fila ya la tiene (señal de que la
+ * columna existe, y así también se puede vaciar).
+ */
+function conGaleriaSiAplica(payload, filaActual = null) {
+  if (payload.gallery.length > 0 || (filaActual && 'gallery' in filaActual)) return payload;
+  const { gallery: _omitida, ...resto } = payload;
+  return resto;
+}
+
+/** Traduce el error de una base sin la columna `gallery` a qué hacer. */
+function guardarProducto({ data, error }) {
+  if (error && /gallery/i.test(error.message)) {
+    throw new Error(
+      'Para guardar fotos adicionales falta actualizar la base de datos (columna «gallery»). Ejecuta la actualización del SQL en Supabase.'
+    );
+  }
+  return unwrap({ data, error });
 }
 
 /**
@@ -120,7 +145,9 @@ export const products = {
   },
 
   async create(data) {
-    const rows = unwrap(await supabase.from('products').insert([sanitizeProductPayload(data)]).select());
+    const rows = guardarProducto(
+      await supabase.from('products').insert([conGaleriaSiAplica(sanitizeProductPayload(data))]).select()
+    );
     return rows?.[0] ?? data;
   },
 
@@ -128,8 +155,12 @@ export const products = {
     const actual = await products.get(id);
     if (!actual) throw new Error('El producto ya no existe.');
 
-    const rows = unwrap(
-      await supabase.from('products').update(sanitizeProductPayload({ ...actual, ...patch })).eq('id', id).select()
+    const rows = guardarProducto(
+      await supabase
+        .from('products')
+        .update(conGaleriaSiAplica(sanitizeProductPayload({ ...actual, ...patch }), actual))
+        .eq('id', id)
+        .select()
     );
     return rows?.[0] ?? { ...actual, ...patch, id };
   },
@@ -158,11 +189,20 @@ export const products = {
     return filas?.length ?? 0;
   },
 
-  async uploadImage(file) {
-    const extension = file.name.split('.').pop();
+  /**
+   * Sube la foto ya redimensionada (WebP) y, con `quitarFondo`, con el fondo
+   * blanco pasado a negro. Antes subía el archivo tal cual: fotos de varios MB
+   * que tardaban en cargar en el celular.
+   */
+  async uploadImage(file, { quitarFondo = false } = {}) {
+    const optimizada = await fileToOptimizedBlob(file, { quitarFondo });
+    const cuerpo = optimizada?.blob ?? file;
+    const extension = optimizada?.extension ?? file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}.${extension}`;
 
-    const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(fileName, file);
+    const { error } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(fileName, cuerpo, { contentType: cuerpo.type || file.type });
     if (error) throw new Error(`No se pudo subir la imagen: ${error.message}`);
 
     const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(fileName);
@@ -538,7 +578,7 @@ export const maintenance = {
     }
 
     const limpios = backup.products.map((product) => ({
-      ...sanitizeProductPayload(product),
+      ...conGaleriaSiAplica(sanitizeProductPayload(product), product),
       id: Number(product.id) || undefined,
     }));
 

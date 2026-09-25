@@ -87,7 +87,8 @@ src/
     security.js         PBKDF2, sesiones, bloqueo por intentos, saneado de texto y URLs
     motion.js           variantes de animación compartidas
     productForm.js      validación del formulario de alta
-    image.js            validación, redimensionado y peso de fotos
+    image.js            validación, redimensionado, peso de fotos y quitar el fondo blanco
+    galeria.js          fotos de un producto: `image_url` (principal) + `gallery` (adicionales)
     idb.js              envoltorio mínimo de IndexedDB
   context/              AuthContext, CartContext, WishlistContext, SettingsContext
   hooks/                useDocumentTitle
@@ -126,7 +127,7 @@ import { products, orders, auth, users, settings, maintenance,
 
 | Módulo | Operaciones | Permiso |
 |---|---|---|
-| `products` | `list()` `get(id)` `create(data)` `update(id, patch)` `remove(id)` `bulkUpdate(ids, patch)` `bulkRemove(ids)` `renameGroup('brand'\|'category', desde, hacia)` `uploadImage(file)` | lectura libre; escritura **admin** o **catálogo** |
+| `products` | `list()` `get(id)` `create(data)` `update(id, patch)` `remove(id)` `bulkUpdate(ids, patch)` `bulkRemove(ids)` `renameGroup('brand'\|'category', desde, hacia)` `uploadImage(file, { quitarFondo })` | lectura libre; escritura **admin** o **catálogo** |
 | `orders` | `listAll()` `listByUser(id)` `create({...})` `updateStatus(id, estado)` `remove(id)` | `listAll`/`updateStatus`/`remove` **admin**; `listByUser` sólo la propia cuenta (o admin) |
 | `auth` | `getSession()` `onAuthStateChange(cb)` `signIn` `signUp` `signOut` `updateProfile(id, {name, avatar_url})` `changePassword(actual, nueva)` `requestPasswordReset(email)` `completePasswordReset(nueva)` `uploadAvatar(file)` | — |
 | `users` | `list()` `create({...})` `setRole(id, rol)` `remove(id)` `setPassword(id, nueva)` | **admin** |
@@ -219,7 +220,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (301 pruebas, 21 archivos)
+npm test             # suite completa (312 pruebas, 23 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -426,7 +427,7 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (301 / 21) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (312 / 23) se actualizan a mano cuando
   cambian.
 - **Nunca uses `async` ni llames a Supabase dentro de
   `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de

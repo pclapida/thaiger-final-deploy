@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Check, ImageIcon, Package, Trash2, Upload, Wand2 } from 'lucide-react';
+import { AlertTriangle, Check, ImageIcon, ImagePlus, Package, Star, Trash2, Upload, Wand2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from './ui/Modal';
 import { Field, TextAreaField, TextField, inputClasses } from './ui/Field';
 import { formatPrice, getDisplayPrice, getDiscountPercent, hasDiscount } from '../lib/pricing';
 import { buildProductPayload } from '../lib/productForm';
+import { MAX_FOTOS_EXTRA } from '../lib/galeria';
 
 const FORMULARIO_VACIO = {
   name: '',
@@ -15,6 +16,7 @@ const FORMULARIO_VACIO = {
   price2: '',
   price3: '',
   image_url: '',
+  gallery: [],
   is_on_sale: false,
   discount_percent: 15,
   stock: 10,
@@ -36,6 +38,7 @@ function formularioDesde(producto) {
     price2: producto.price2 ?? '',
     price3: producto.price3 ?? '',
     image_url: producto.image_url || '',
+    gallery: Array.isArray(producto.gallery) ? producto.gallery : [],
     is_on_sale: Boolean(producto.is_on_sale),
     discount_percent: producto.discount_percent || 15,
     stock: producto.stock ?? 0,
@@ -100,6 +103,8 @@ export default function ProductFormModal({
   const [intentado, setIntentado] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
+  // Las fotos de proveedor vienen sobre blanco y la tienda es negra.
+  const [quitarFondo, setQuitarFondo] = useState(true);
 
   const errores = useMemo(() => validarFormulario(form), [form]);
   const avisos = useMemo(() => avisosDePrecio(form), [form]);
@@ -138,7 +143,7 @@ export default function ProductFormModal({
     setSubiendo(true);
     const aviso = toast.loading('Procesando imagen...');
     try {
-      const url = await onSubirImagen(archivo);
+      const url = await onSubirImagen(archivo, { quitarFondo });
       setForm((prev) => ({ ...prev, image_url: url }));
       toast.success('Imagen lista', { id: aviso });
     } catch (error) {
@@ -147,6 +152,59 @@ export default function ProductFormModal({
       setSubiendo(false);
     }
   };
+
+  /**
+   * Sube varias fotos adicionales, una tras otra, hasta llenar los lugares
+   * libres. Si alguna falla, las demás siguen.
+   */
+  const procesarExtras = async (archivos) => {
+    const libres = MAX_FOTOS_EXTRA - form.gallery.length;
+    const lista = Array.from(archivos || []);
+    if (lista.length === 0) return;
+    if (libres <= 0) {
+      toast.error(`Ya tiene las ${MAX_FOTOS_EXTRA} fotos adicionales permitidas.`);
+      return;
+    }
+    if (lista.length > libres) toast(`Sólo caben ${libres} fotos más; se subirán las primeras.`);
+
+    setSubiendo(true);
+    const aviso = toast.loading('Procesando fotos...');
+    // La misma foto dos veces no aporta nada (y la galería la descartaría al guardar).
+    const presentes = new Set([form.image_url, ...form.gallery].filter(Boolean));
+    let listas = 0;
+    let repetidas = 0;
+    for (const archivo of lista.slice(0, libres)) {
+      try {
+        const url = await onSubirImagen(archivo, { quitarFondo });
+        if (presentes.has(url)) {
+          repetidas += 1;
+          continue;
+        }
+        presentes.add(url);
+        setForm((prev) => ({ ...prev, gallery: [...prev.gallery, url] }));
+        listas += 1;
+      } catch (error) {
+        toast.error(`${archivo.name}: ${error.message || 'no se pudo procesar'}`);
+      }
+    }
+    setSubiendo(false);
+    if (listas > 0) toast.success(listas === 1 ? 'Foto agregada' : `${listas} fotos agregadas`, { id: aviso });
+    else toast.dismiss(aviso);
+    if (repetidas > 0) toast.error(repetidas === 1 ? 'Esa foto ya está en el producto.' : `${repetidas} fotos ya estaban en el producto.`);
+  };
+
+  const quitarExtra = (indice) =>
+    setForm((prev) => ({ ...prev, gallery: prev.gallery.filter((_, i) => i !== indice) }));
+
+  /** La foto adicional pasa a principal y la principal ocupa su lugar. */
+  const hacerPrincipal = (indice) =>
+    setForm((prev) => {
+      const elegida = prev.gallery[indice];
+      const gallery = [...prev.gallery];
+      if (prev.image_url) gallery[indice] = prev.image_url;
+      else gallery.splice(indice, 1);
+      return { ...prev, image_url: elegida, gallery };
+    });
 
   /** Sugerencia de precios escalonados: -10% y -20% sobre el precio público. */
   const calcularNiveles = () => {
@@ -480,8 +538,8 @@ export default function ProductFormModal({
             }`}
           >
             <Field
-              label="Foto del Producto"
-              hint="Arrastra la imagen aquí, elígela del disco o pega una dirección."
+              label="Foto principal"
+              hint="La que se ve en el catálogo. Arrastra la imagen aquí, elígela del disco o pega una dirección."
             >
               {({ id, describedBy }) => (
                 <input
@@ -499,8 +557,21 @@ export default function ProductFormModal({
               )}
             </Field>
 
+            <label className="flex min-h-[44px] items-start gap-3 text-xs leading-relaxed text-gray-400">
+              <input
+                type="checkbox"
+                checked={quitarFondo}
+                onChange={(evento) => setQuitarFondo(evento.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-orange-600"
+              />
+              <span>
+                <span className="font-bold text-gray-300">Quitar el fondo blanco</span> de las fotos que subas (queda
+                negro, como la tienda). Desmárcalo si una foto sale recortada de más.
+              </span>
+            </label>
+
             <div className="flex items-start gap-4">
-              <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-gray-700 bg-white">
+              <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-gray-700 bg-black">
                 {form.image_url ? (
                   <img src={form.image_url} alt="Vista previa de la foto" className="h-full w-full object-contain" />
                 ) : (
@@ -538,12 +609,84 @@ export default function ProductFormModal({
             </div>
           </div>
 
+          {/* Fotos adicionales: se ven en la ficha del producto, debajo de la principal. */}
+          <fieldset
+            onDragOver={(evento) => evento.preventDefault()}
+            onDrop={(evento) => {
+              evento.preventDefault();
+              procesarExtras(evento.dataTransfer?.files);
+            }}
+            className="space-y-3 rounded-lg border border-gray-800 bg-black/40 p-4"
+          >
+            <legend className="px-1 text-xs font-bold uppercase tracking-wider text-gray-400">
+              Más fotos ({form.gallery.length}/{MAX_FOTOS_EXTRA})
+            </legend>
+            <p className="text-[11px] leading-relaxed text-gray-400">
+              Otros ángulos, la tabla nutrimental, el sabor... Puedes elegir varias a la vez o arrastrarlas aquí.
+            </p>
+
+            <ul className="grid grid-cols-3 gap-3">
+              {form.gallery.map((url, indice) => (
+                <li key={url} className="overflow-hidden rounded-lg border border-gray-800 bg-black">
+                  <img src={url} alt={`Foto adicional ${indice + 1}`} className="aspect-square w-full object-contain" />
+                  <div className="flex justify-between border-t border-gray-800">
+                    <button
+                      type="button"
+                      onClick={() => hacerPrincipal(indice)}
+                      disabled={subiendo}
+                      aria-label={`Usar la foto adicional ${indice + 1} como principal`}
+                      title="Usar como principal"
+                      className="grid h-11 w-11 place-items-center text-gray-400 transition-colors hover:text-brand-500 disabled:opacity-40"
+                    >
+                      <Star size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quitarExtra(indice)}
+                      disabled={subiendo}
+                      aria-label={`Quitar la foto adicional ${indice + 1}`}
+                      title="Quitar"
+                      className="grid h-11 w-11 place-items-center text-gray-400 transition-colors hover:text-red-500 disabled:opacity-40"
+                    >
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+
+              {form.gallery.length < MAX_FOTOS_EXTRA && (
+                <li>
+                  <label
+                    className={`flex aspect-square w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-700 text-center text-[10px] font-bold uppercase text-gray-400 transition-colors hover:border-brand-500 hover:text-brand-500 ${
+                      subiendo ? 'pointer-events-none opacity-50' : ''
+                    }`}
+                  >
+                    <ImagePlus size={20} aria-hidden="true" />
+                    Agregar
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={subiendo}
+                      className="sr-only"
+                      aria-label="Agregar fotos adicionales"
+                      onChange={(evento) => {
+                        procesarExtras(evento.target.files);
+                        evento.target.value = '';
+                      }}
+                    />
+                  </label>
+                </li>
+              )}
+            </ul>
+          </fieldset>
+
           {/* Cómo se verá en la tienda. Decorativo: no compite con el formulario. */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Así se verá en la tienda</h3>
 
             <div aria-hidden="true" className="superficie overflow-hidden rounded-xl">
-              <div className="relative flex h-44 items-center justify-center bg-white">
+              <div className="relative flex h-44 items-center justify-center bg-black">
                 {vistaPrevia.image_url ? (
                   <img src={vistaPrevia.image_url} alt="" className="h-full w-full object-contain p-3" />
                 ) : (

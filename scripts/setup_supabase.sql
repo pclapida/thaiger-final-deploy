@@ -170,6 +170,8 @@ alter table public.products add column if not exists weight_g integer not null d
 alter table public.products add column if not exists length_cm integer not null default 20;
 alter table public.products add column if not exists width_cm integer not null default 15;
 alter table public.products add column if not exists height_cm integer not null default 10;
+-- Fotos adicionales de la ficha (la principal sigue en image_url).
+alter table public.products add column if not exists gallery text[] default '{}';
 
 alter table public.products enable row level security;
 

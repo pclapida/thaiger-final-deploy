@@ -172,7 +172,7 @@ export default function Cart() {
                         <Link
                           to={`/product/${item.id}`}
                           aria-label={`Ver ${item.name}`}
-                          className="grid h-28 w-full shrink-0 place-items-center overflow-hidden rounded-lg bg-white sm:h-28 sm:w-28"
+                          className="grid h-28 w-full shrink-0 place-items-center overflow-hidden rounded-lg bg-black sm:h-28 sm:w-28"
                         >
                           {item.image_url ? (
                             <img

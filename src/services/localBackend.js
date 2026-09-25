@@ -27,6 +27,7 @@ import {
 import { SETTINGS_ID, buildDefaultSettings, withSettingsDefaults } from '../data/settings';
 import { fileToOptimizedDataUrl } from '../lib/image';
 import { normalizarRol, puedeEditarCatalogo } from '../lib/roles';
+import { normalizarGaleria } from '../lib/galeria';
 import { computeCartTotals, configurePricing, getUnitPrice, roundMoney } from '../lib/pricing';
 import {
   clearLoginFailures,
@@ -254,6 +255,7 @@ function sanitizeProduct(data, catalogo = []) {
     price2: price2 > 0 ? price2 : price1,
     price3: price3 > 0 ? price3 : price1,
     image_url: sanitizeImageUrl(data.image_url),
+    gallery: normalizarGaleria(data.gallery, sanitizeImageUrl(data.image_url)),
     stock: Number.isFinite(stock) && stock >= 0 ? Math.floor(stock) : 0,
     is_on_sale: Boolean(data.is_on_sale),
     discount_percent: data.is_on_sale && discount > 0 && discount < 100 ? Math.round(discount) : 0,
@@ -375,8 +377,9 @@ export const products = {
   },
 
   /** En modo local la foto se guarda incrustada como data URL. */
-  async uploadImage(file) {
-    return fileToOptimizedDataUrl(file);
+  /** `quitarFondo`: pasa a negro el fondo blanco de la foto (ver lib/image.js). */
+  async uploadImage(file, { quitarFondo = false } = {}) {
+    return fileToOptimizedDataUrl(file, { quitarFondo });
   },
 };
 

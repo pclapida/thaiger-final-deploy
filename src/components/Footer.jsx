@@ -242,18 +242,18 @@ export default function Footer() {
 
       {/* ---------------------------------------------------- colaboración */}
       <div className="border-t border-carbon-700">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-4 px-4 py-10">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-8">
           <p className="sr-only">Colaboración</p>
-          <div className="flex items-center gap-4 sm:gap-8">
+          <div className="flex items-center gap-3 sm:gap-5">
             <img
               src="/images/colaboracion/nunca-dejes-de-amar.webp"
               alt="Ilustración «Nunca dejes de amar»"
               width="273"
               height="320"
               loading="lazy"
-              className="h-24 w-auto object-contain sm:h-32"
+              className="h-14 w-auto object-contain sm:h-16"
             />
-            <span aria-hidden="true" className="text-2xl font-light text-brand-500 sm:text-3xl">
+            <span aria-hidden="true" className="text-lg font-light text-brand-500">
               ×
             </span>
             <img
@@ -262,7 +262,7 @@ export default function Footer() {
               width="280"
               height="320"
               loading="lazy"
-              className="h-24 w-auto object-contain sm:h-32"
+              className="h-14 w-auto object-contain sm:h-16"
             />
           </div>
           <p className="text-[11px] uppercase tracking-[0.3em] text-gray-400">

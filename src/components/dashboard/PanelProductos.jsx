@@ -841,7 +841,7 @@ export default function PanelProductos({
                     </td>
 
                     <td className="px-4 py-3">
-                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded bg-white">
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded bg-black">
                         {producto.image_url ? (
                           <img
                             src={producto.image_url}
@@ -960,7 +960,7 @@ export default function PanelProductos({
                     className="mt-1 h-4 w-4 shrink-0 accent-orange-600"
                   />
 
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-white">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-black">
                     {producto.image_url ? (
                       <img src={producto.image_url} alt="" className="h-full w-full object-contain" />
                     ) : (

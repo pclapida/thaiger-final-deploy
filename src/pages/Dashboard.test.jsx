@@ -34,6 +34,12 @@ async function abrirPestanaProductos(user, { filtrar } = {}) {
   }
 }
 
+/** Una foto con bytes propios: dos archivos idénticos se tratarían como la misma foto. */
+function fotoDistinta(nombre, marca) {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, marca]);
+  return new File([bytes], nombre, { type: 'image/jpeg' });
+}
+
 async function abrirModalNuevo(user) {
   await user.click(screen.getByRole('button', { name: /añadir producto/i }));
   return screen.findByRole('heading', { name: /nuevo producto/i });
@@ -92,10 +98,17 @@ describe('panel de administración', () => {
     await user.type(screen.getByLabelText(/precio público/i), '1499.90');
 
     // Foto tomada del disco del usuario.
-    await user.upload(screen.getByLabelText(/foto del producto/i), makeImageFile());
+    await user.upload(screen.getByLabelText(/foto principal/i), makeImageFile());
     await waitFor(() =>
       expect(screen.getByAltText(/vista previa/i)).toHaveAttribute('src', expect.stringContaining('data:image/'))
     );
+
+    // Y dos fotos adicionales de una sola vez.
+    await user.upload(screen.getByLabelText(/agregar fotos adicionales/i), [
+      fotoDistinta('lateral.jpg', 1),
+      fotoDistinta('tabla.jpg', 2),
+    ]);
+    await waitFor(() => expect(screen.getAllByAltText(/foto adicional/i)).toHaveLength(2));
 
     await user.click(screen.getByRole('button', { name: /crear producto/i }));
 
@@ -110,6 +123,7 @@ describe('panel de administración', () => {
       description: 'Aislado de suero, 60 servicios.',
     });
     expect(creado.image_url).toMatch(/^data:image\//);
+    expect(creado.gallery).toHaveLength(2);
     // Sin niveles 2 y 3 capturados, se usa el precio público.
     expect(creado.price2).toBe(1499.9);
     expect(creado.price3).toBe(1499.9);

@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle,
   Check,
+  ChevronLeft,
   ChevronRight,
   Heart,
   Layers,
@@ -30,6 +31,7 @@ import { useCart } from '../context/CartContext';
 import { useSettings } from '../context/SettingsContext';
 import { useWishlist } from '../context/WishlistContext';
 import { products as productsApi } from '../services/api';
+import { fotosDeProducto } from '../lib/galeria';
 import {
   formatPrice,
   getDiscountPercent,
@@ -148,6 +150,7 @@ export default function ProductDetails() {
 
   const [cantidad, setCantidad] = useState(1);
   const [fotoRota, setFotoRota] = useState(false);
+  const [fotoActiva, setFotoActiva] = useState(0);
   const [zoom, setZoom] = useState(ZOOM_APAGADO);
   const [anadido, setAnadido] = useState(false);
 
@@ -166,6 +169,7 @@ export default function ProductDetails() {
     setFallo('');
     setCantidad(1);
     setFotoRota(false);
+    setFotoActiva(0);
     setZoom(ZOOM_APAGADO);
     setAnadido(false);
     setOpiniones(leerOpiniones(id));
@@ -397,6 +401,18 @@ export default function ProductDetails() {
       : `Suplemento de ${producto.category} de ${producto.brand}, seleccionado para entrenamientos exigentes. Producto sellado y original.`;
 
   const zoomActivo = zoom.activo && !reducido;
+
+  // La principal primero y luego las adicionales (ver src/lib/galeria.js).
+  const fotos = fotosDeProducto(producto);
+  const indiceFoto = Math.min(fotoActiva, Math.max(fotos.length - 1, 0));
+  const fotoActual = fotos[indiceFoto];
+  const variasFotos = fotos.length > 1;
+
+  const verFoto = (indice) => {
+    setFotoActiva((indice + fotos.length) % fotos.length);
+    setFotoRota(false);
+    setZoom(ZOOM_APAGADO);
+  };
   const enFavoritos = isInWishlist(producto.id);
 
   return (
@@ -446,14 +462,15 @@ export default function ProductDetails() {
             className="lg:sticky lg:top-[calc(var(--alto-cabecera,5rem)+0.5rem)] lg:self-start"
           >
             <div
-              className="relative aspect-square w-full overflow-hidden rounded-2xl bg-white"
+              className="relative aspect-square w-full overflow-hidden rounded-2xl bg-black"
               onPointerMove={moverZoom}
               onPointerLeave={apagarZoom}
             >
-              {producto.image_url && !fotoRota ? (
+              {fotoActual && !fotoRota ? (
                 <img
-                  src={producto.image_url}
-                  alt={producto.name}
+                  key={fotoActual}
+                  src={fotoActual}
+                  alt={variasFotos ? `${producto.name}, foto ${indiceFoto + 1} de ${fotos.length}` : producto.name}
                   onError={() => setFotoRota(true)}
                   className="h-full w-full object-contain p-6"
                   style={{
@@ -480,7 +497,48 @@ export default function ProductDetails() {
                   Agotado
                 </span>
               )}
+
+              {variasFotos && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => verFoto(indiceFoto - 1)}
+                    aria-label="Foto anterior"
+                    className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/60 text-white transition-colors hover:bg-brand-600"
+                  >
+                    <ChevronLeft size={20} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => verFoto(indiceFoto + 1)}
+                    aria-label="Foto siguiente"
+                    className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/60 text-white transition-colors hover:bg-brand-600"
+                  >
+                    <ChevronRight size={20} aria-hidden="true" />
+                  </button>
+                </>
+              )}
             </div>
+
+            {variasFotos && (
+              <ul aria-label="Fotos del producto" className="custom-scrollbar mt-4 flex gap-3 overflow-x-auto pb-1">
+                {fotos.map((url, indice) => (
+                  <li key={url} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => verFoto(indice)}
+                      aria-label={`Ver foto ${indice + 1} de ${fotos.length}`}
+                      aria-current={indice === indiceFoto ? 'true' : undefined}
+                      className={`grid h-16 w-16 place-items-center overflow-hidden rounded-lg border-2 bg-black transition-colors sm:h-20 sm:w-20 ${
+                        indice === indiceFoto ? 'border-brand-500' : 'border-gray-800 hover:border-gray-600'
+                      }`}
+                    >
+                      <img src={url} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <p className="mt-3 hidden items-center justify-center gap-2 text-[11px] uppercase tracking-widest text-gray-400 lg:flex">
               <ZoomIn size={12} aria-hidden="true" /> Pasa el cursor sobre la foto para ampliarla

@@ -88,6 +88,11 @@ pedidos reales, los $25 USD/mes del plan Pro son un seguro, no un lujo.
    Debe decir **1 row affected**. Si dice 0, la cuenta no tiene perfil:
    vuelve a ejecutar `scripts/setup_supabase.sql` completo (crea los perfiles
    que falten) y repite el `update`.
+   **Fotos.** Cada producto lleva una foto principal y hasta 8 adicionales
+   (columna `gallery`). Al subirlas, la casilla «Quitar el fondo blanco» pasa a
+   negro el blanco que toca los bordes, para que no se vean recuadros sobre la
+   tienda negra; desmárcala si una foto sale recortada de más.
+
    **Cuentas del equipo.** Supabase → **Authentication → Users → Add user →
    Create new user**, con «Auto Confirm User» marcado. Luego, en
    `/dashboard → Usuarios`, dale el rol:

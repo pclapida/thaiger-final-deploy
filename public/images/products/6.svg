@@ -6,12 +6,12 @@
       <stop offset="100%" stop-color="#8c3507"/>
     </linearGradient>
     <radialGradient id="piso" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#000000" stop-opacity="0.16"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <rect width="600" height="600" fill="#ffffff"/>
+  <rect width="600" height="600" fill="#000000"/>
   <ellipse cx="300" cy="548" rx="180" ry="26" fill="url(#piso)"/>
   
     <rect x="222" y="112" width="156" height="52" rx="18" fill="#983908"/>

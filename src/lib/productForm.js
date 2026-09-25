@@ -1,4 +1,5 @@
 /** Validación y normalización del formulario de productos del panel de administración. */
+import { normalizarGaleria } from './galeria';
 
 /** Normaliza y valida el formulario. Devuelve `{ payload }` o `{ error }`. */
 export function buildProductPayload(form) {
@@ -34,6 +35,7 @@ export function buildProductPayload(form) {
       price2: price2 > 0 ? price2 : price1,
       price3: price3 > 0 ? price3 : price1,
       image_url: form.image_url || null,
+      gallery: normalizarGaleria(form.gallery, form.image_url || null),
       stock: Number.isFinite(stock) && stock >= 0 ? stock : 0,
       is_on_sale: Boolean(form.is_on_sale),
       discount_percent: form.is_on_sale && discount > 0 ? discount : 0,

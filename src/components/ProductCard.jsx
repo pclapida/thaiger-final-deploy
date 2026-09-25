@@ -76,7 +76,7 @@ export default function ProductCard({ product, delay = 0, index }) {
       whileHover={reduced ? undefined : { y: -6 }}
     >
       {/* -------------------------------------------------------------- foto */}
-      <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-white">
+      <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-black">
         {mostrarFoto ? (
           <img
             src={foto}
@@ -88,8 +88,7 @@ export default function ProductCard({ product, delay = 0, index }) {
           />
         ) : (
           // Marcador: una foto rota nunca deja un hueco en la rejilla.
-          // Gris 500 sobre gris 100: aquí el fondo es claro, no oscuro.
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gray-100 text-gray-500">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-carbon-800 text-gray-400">
             <ImageOff size={40} aria-hidden="true" />
             <span className="text-[10px] font-bold uppercase tracking-widest">Sin foto</span>
           </div>
