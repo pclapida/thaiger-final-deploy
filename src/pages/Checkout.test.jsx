@@ -20,7 +20,9 @@ async function llenarEnvio(user) {
   await user.type(screen.getByPlaceholderText(/juan pérez/i), 'Juan Pérez');
   await user.type(screen.getByPlaceholderText(/\+52/), '5512345678');
   await user.type(screen.getByPlaceholderText(/av\. revolución/i), 'Av. Revolución 123');
-  await user.type(screen.getByPlaceholderText(/cdmx/i), 'CDMX');
+  await user.type(screen.getByLabelText(/colonia/i), 'Centro');
+  await user.type(screen.getByLabelText(/ciudad o municipio/i), 'CDMX');
+  await user.selectOptions(screen.getByLabelText(/^estado/i), 'Ciudad de México');
   await user.type(screen.getByPlaceholderText('00000'), '01000');
 }
 
@@ -136,7 +138,13 @@ describe('checkout', () => {
 
     const [pedido] = await orders.listByUser(cliente.id);
     expect(pedido.status).toBe('Pago Pendiente');
-    expect(pedido.shipping_info).toMatchObject({ fullName: 'Juan Pérez', city: 'CDMX', zip: '01000' });
+    expect(pedido.shipping_info).toMatchObject({
+      fullName: 'Juan Pérez',
+      neighborhood: 'Centro',
+      city: 'CDMX',
+      state: 'Ciudad de México',
+      zip: '01000',
+    });
     expect(pedido.payment_info.method).toBe('SPEI');
     expect(pedido.order_items).toHaveLength(1);
     expect(pedido.order_items[0]).toMatchObject({ product_id: producto.id, quantity: 2 });

@@ -134,8 +134,10 @@ function DetallePedido({ pedido, paraImprimir = false }) {
             {pedido.shipping_info?.fullName}
             <br />
             {pedido.shipping_info?.address}
+            {pedido.shipping_info?.neighborhood && <>, Col. {pedido.shipping_info.neighborhood}</>}
             <br />
-            {pedido.shipping_info?.city} · C.P. {pedido.shipping_info?.zip}
+            {pedido.shipping_info?.city}
+            {pedido.shipping_info?.state && <>, {pedido.shipping_info.state}</>} · C.P. {pedido.shipping_info?.zip}
             <br />
             Tel. {pedido.shipping_info?.phone}
             {pedido.shipping_info?.notes && (
@@ -354,6 +356,7 @@ export default function PanelPedidos({
         const campos = [
           pedido.shipping_info?.fullName,
           pedido.shipping_info?.city,
+          pedido.shipping_info?.state,
           pedido.payment_info?.concepto,
           pedido.id,
           referencia(pedido.id),
@@ -623,7 +626,8 @@ export default function PanelPedidos({
                                   {pedido.shipping_info?.fullName || 'Desconocido'}
                                 </p>
                                 <p className="text-[10px] uppercase">
-                                  {pedido.shipping_info?.city} · {pedido.shipping_info?.zip}
+                                  {[pedido.shipping_info?.city, pedido.shipping_info?.state].filter(Boolean).join(', ')} ·{' '}
+                                  {pedido.shipping_info?.zip}
                                 </p>
                                 <p className="text-[10px] text-gray-400">{pedido.shipping_info?.phone}</p>
                               </td>

@@ -34,6 +34,7 @@ import { useSettings } from '../context/SettingsContext';
 import { auth as authApi, orders as ordersApi, payments as paymentsApi, products as productsApi } from '../services/api';
 import { formatPrice } from '../lib/pricing';
 import { ETIQUETAS_ROL, normalizarRol, puedeEntrarAlPanel } from '../lib/roles';
+import { lineaDireccion } from '../lib/estados';
 import { ESTADOS_PEDIDO } from '../lib/metrics';
 import { sanitizeImageUrl, sanitizeText, validatePassword } from '../lib/security';
 import { fadeUp, resolveVariants, staggerContainer, staggerItem } from '../lib/motion';
@@ -706,7 +707,7 @@ export default function UserProfile() {
 
                               {pedido.shipping_info?.address && (
                                 <p className="mt-4 text-xs leading-relaxed text-gray-500">
-                                  Envío a: {pedido.shipping_info.address}, {pedido.shipping_info.city} {pedido.shipping_info.zip}
+                                  Envío a: {lineaDireccion(pedido.shipping_info)}
                                 </p>
                               )}
                             </div>

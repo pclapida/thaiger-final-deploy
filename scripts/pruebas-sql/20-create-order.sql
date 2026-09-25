@@ -152,3 +152,16 @@ begin
     perform pruebas.afirmar((select count(*) from public.orders) = v_pedidos,
         'si una línea falla, no queda pedido a medias');
 end $$;
+
+-- --------------------------------------- colonia y estado viajan a la guía
+do $$
+declare v_envio jsonb;
+begin
+    perform set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+    perform public.create_order('[{"product_id": 3, "quantity": 1}]'::jsonb,
+        '{"fullName":"Juan","phone":"5512345678","address":"Av. Demo 123","neighborhood":"Centro","city":"Monterrey","state":"Nuevo León","zip":"64000"}'::jsonb,
+        '{}'::jsonb);
+    select shipping_info into v_envio from public.orders order by created_at desc limit 1;
+    perform pruebas.afirmar(v_envio->>'neighborhood' = 'Centro' and v_envio->>'state' = 'Nuevo León',
+        'el pedido guarda colonia y estado (la paquetería los pide para la guía)');
+end $$;

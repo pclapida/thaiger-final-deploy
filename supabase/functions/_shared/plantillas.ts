@@ -28,7 +28,15 @@ export interface PedidoCorreo {
   shipping_cost?: number;
   payment_provider?: string;
   payment_info?: { concepto?: string } | null;
-  shipping_info?: { fullName?: string; address?: string; city?: string; zip?: string; phone?: string } | null;
+  shipping_info?: {
+    fullName?: string;
+    address?: string;
+    neighborhood?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    phone?: string;
+  } | null;
   shipment?: { carrier?: string; tracking_number?: string; tracking_url?: string; label_url?: string } | null;
   order_items?: Array<{ product_name: string; quantity: number; price_at_purchase: number }>;
   created_at?: string;
@@ -85,8 +93,8 @@ function bloqueDireccion(pedido: PedidoCorreo): string {
   return `
     <p style="font-size:14px;line-height:1.5;margin:0">
       <strong>${escapar(e.fullName)}</strong><br>
-      ${escapar(e.address)}<br>
-      ${escapar(e.city)} · C.P. ${escapar(e.zip)}<br>
+      ${escapar(e.address)}${e.neighborhood ? `, Col. ${escapar(e.neighborhood)}` : ''}<br>
+      ${escapar(e.city)}${e.state ? `, ${escapar(e.state)}` : ''} · C.P. ${escapar(e.zip)}<br>
       Tel. ${escapar(e.phone)}
     </p>`;
 }

@@ -75,7 +75,9 @@ Deno.serve(async (req) => {
       const destino = {
         name: pedido.shipping_info?.fullName,
         street: pedido.shipping_info?.address,
+        neighborhood: pedido.shipping_info?.neighborhood,
         city: pedido.shipping_info?.city,
+        state: pedido.shipping_info?.state,
         zip: String(pedido.shipping_info?.zip ?? ''),
         phone: pedido.shipping_info?.phone,
         country: 'MX',

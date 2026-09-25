@@ -461,7 +461,9 @@ function sanitizeShipping(info = {}) {
     fullName: sanitizeText(info.fullName, { maxLength: 90 }),
     phone: sanitizeText(info.phone, { maxLength: 25 }),
     address: sanitizeText(info.address, { maxLength: 160 }),
+    neighborhood: sanitizeText(info.neighborhood, { maxLength: 80 }),
     city: sanitizeText(info.city, { maxLength: 60 }),
+    state: sanitizeText(info.state, { maxLength: 40 }),
     zip: sanitizeText(info.zip, { maxLength: 10 }),
     notes: sanitizeText(info.notes, { maxLength: 300, allowNewlines: true }),
   };

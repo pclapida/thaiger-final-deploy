@@ -19,7 +19,7 @@ import {
 import toast from 'react-hot-toast';
 
 import EmptyState from '../components/ui/EmptyState';
-import { TextField } from '../components/ui/Field';
+import { Field, TextField, inputClasses } from '../components/ui/Field';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 
 import { useAuth } from '../context/AuthContext';
@@ -28,8 +28,10 @@ import { useSettings } from '../context/SettingsContext';
 import { orders as ordersApi, payments as paymentsApi, shipping as shippingApi } from '../services/api';
 import { computeCartTotals, formatPrice, getPricingConfig, getUnitPrice, roundMoney } from '../lib/pricing';
 import { fadeUp, resolveVariants } from '../lib/motion';
+import { ESTADOS_MX } from '../lib/estados';
 
-const ENVIO_VACIO = { fullName: '', phone: '', address: '', city: '', zip: '' };
+// Colonia y estado: las paqueterías no generan la guía sin ellos.
+const ENVIO_VACIO = { fullName: '', phone: '', address: '', neighborhood: '', city: '', state: '', zip: '' };
 
 const AVISO_INCOMPLETO = 'Por favor completa tu dirección de envío en todos los campos.';
 
@@ -62,7 +64,9 @@ const REGLAS = {
     if (valor.trim().length < 5) return 'La dirección es demasiado corta.';
     return '';
   },
-  city: (valor) => (valor.trim() ? '' : 'Escribe tu ciudad.'),
+  neighborhood: (valor) => (valor.trim() ? '' : 'Escribe tu colonia.'),
+  city: (valor) => (valor.trim() ? '' : 'Escribe tu ciudad o municipio.'),
+  state: (valor) => (valor ? '' : 'Elige tu estado.'),
   zip: (valor) => {
     const digitos = soloDigitos(valor);
     if (!digitos) return 'Escribe tu código postal.';
@@ -355,16 +359,48 @@ export default function Checkout() {
                   error={errorDe('address')}
                 />
                 <TextField
-                  label="Ciudad"
+                  label="Colonia"
+                  required
+                  type="text"
+                  autoComplete="address-level3"
+                  placeholder="Centro"
+                  value={formulario.neighborhood}
+                  onChange={escribir('neighborhood')}
+                  onBlur={marcarTocado('neighborhood')}
+                  error={errorDe('neighborhood')}
+                />
+                <TextField
+                  label="Ciudad o municipio"
                   required
                   type="text"
                   autoComplete="address-level2"
-                  placeholder="CDMX / MTY / GDL"
+                  placeholder="Monterrey"
                   value={formulario.city}
                   onChange={escribir('city')}
                   onBlur={marcarTocado('city')}
                   error={errorDe('city')}
                 />
+                <Field label="Estado" required error={errorDe('state')}>
+                  {({ id, describedBy, invalid }) => (
+                    <select
+                      id={id}
+                      aria-describedby={describedBy}
+                      aria-invalid={invalid || undefined}
+                      autoComplete="address-level1"
+                      value={formulario.state}
+                      onChange={escribir('state')}
+                      onBlur={marcarTocado('state')}
+                      className={inputClasses({ invalid })}
+                    >
+                      <option value="">Elige tu estado</option>
+                      {ESTADOS_MX.map((estado) => (
+                        <option key={estado} value={estado}>
+                          {estado}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
                 <TextField
                   label="Código postal"
                   required

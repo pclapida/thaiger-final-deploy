@@ -352,7 +352,7 @@ drop function if exists public.create_order(jsonb, jsonb, jsonb);
  * formato que espera `supabaseBackend.orders.create`.
  *
  *   p_items:         [{"product_id": 1, "quantity": 2}, ...]
- *   p_shipping:      {"fullName","phone","address","city","zip","notes"}
+ *   p_shipping:      {"fullName","phone","address","neighborhood","city","state","zip","notes"}
  *   p_payment:       {"provider": "spei" | "mercadopago", "concepto", "banco"}
  *   p_shipping_rate: {"quote_id", "rate_id"} — tarifa cotizada, o null para la
  *                    regla fija de la tienda.
@@ -531,6 +531,9 @@ begin
         'address',  left(btrim(p_shipping->>'address'), 160),
         'city',     left(btrim(p_shipping->>'city'), 60),
         'zip',      left(btrim(p_shipping->>'zip'), 10),
+        -- Colonia y estado: las paqueterías los exigen para la guía.
+        'neighborhood', left(btrim(coalesce(p_shipping->>'neighborhood', '')), 80),
+        'state',        left(btrim(coalesce(p_shipping->>'state', '')), 40),
         'notes',    left(btrim(coalesce(p_shipping->>'notes', '')), 300)
     );
 

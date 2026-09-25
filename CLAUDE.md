@@ -141,7 +141,7 @@ import { products, orders, auth, users, settings, maintenance,
 ```js
 orders.create({
   userId,
-  shippingInfo,                                  // { fullName, phone, address, city, zip }
+  shippingInfo,                                  // { fullName, phone, address, neighborhood, city, state, zip }
   paymentInfo,                                   // { provider: 'spei'|'mercadopago', concepto, banco }
   items: [{ product_id, quantity }],             // ← sólo qué y cuánto
   shippingRate,                                  // { quote_id, rate_id } de shipping.quote, o null
@@ -220,7 +220,7 @@ o el cliente verá un total y se le cobrará otro.
 ```bash
 npm install
 npm run dev          # servidor de desarrollo
-npm test             # suite completa (322 pruebas, 24 archivos)
+npm test             # suite completa (325 pruebas, 25 archivos)
 npm run test:watch
 npm run lint
 npm run build
@@ -427,7 +427,7 @@ entorno. Léela junto con `DESPLIEGUE.md`.
 - Si tocas `create_order()` o `precio_unitario()` en SQL, toca también
   `src/lib/pricing.js`, y corre `scripts/pruebas-sql/ejecutar.sh` (necesita
   Postgres 16 local): la prueba de paridad es la que detecta que se separen.
-- Las cifras de pruebas en este archivo (322 / 24) se actualizan a mano cuando
+- Las cifras de pruebas en este archivo (325 / 25) se actualizan a mano cuando
   cambian.
 - **Nunca uses `async` ni llames a Supabase dentro de
   `supabase.auth.onAuthStateChange`.** supabase-js corre ese callback dentro de
