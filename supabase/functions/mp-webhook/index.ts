@@ -95,6 +95,11 @@ Deno.serve(async (req) => {
     await admin.from('orders').update({ payment_info: rastro }).eq('id', orderId);
     return json({ ok: true, estado: 'approved', orderId });
   } catch (error) {
+    // Un pago que no existe (la notificación de prueba del panel de Mercado
+    // Pago usa el id inventado 123456) no se arregla reintentando: 200.
+    if ((error as { status?: number }).status === 404) {
+      return json({ ignorado: true, motivo: 'el pago no existe', dataId });
+    }
     // Un fallo de red al consultar el pago sí merece reintento: 500.
     console.error('mp-webhook:', error);
     return fallo('Error procesando la notificación.', 500);

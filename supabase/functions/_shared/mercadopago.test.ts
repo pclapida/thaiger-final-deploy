@@ -69,6 +69,20 @@ describe('firma de las notificaciones', () => {
     expect(await firmaValida({ ...base, xSignature: null })).toBe(false);
   });
 
+  it('acepta ts en segundos, como en la documentación de Mercado Pago', async () => {
+    // Éste es el caso que respondía 401 en producción: ts=1704908010 se leía
+    // como milisegundos (enero de 1970) y quedaba fuera de la tolerancia.
+    const ahoraMs = 1_704_908_010_500;
+    const ts = '1704908010';
+    const v1 = firmar('123456', 'req-sim', ts);
+    const base = { xRequestId: 'req-sim', dataId: '123456', secreto: SECRETO, ahoraMs };
+
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}` })).toBe(true);
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${manipular(v1)}` })).toBe(false);
+    // En segundos también caduca: una hora después ya no vale.
+    expect(await firmaValida({ ...base, xSignature: `ts=${ts},v1=${v1}`, ahoraMs: ahoraMs + 3600_000 })).toBe(false);
+  });
+
   it('rechaza la manipulación aunque la firma real empiece por "f"', async () => {
     // Hora fija cuya firma empieza por 'f': el caso que antes pasaba al azar.
     const ahora = 1_700_000_000_032;

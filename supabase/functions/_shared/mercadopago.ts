@@ -75,9 +75,13 @@ export async function firmaValida({
   const partes = parsearXSignature(xSignature);
   if (!partes || !xRequestId || !dataId || !secreto) return false;
 
-  // ts viene en milisegundos.
-  const tsMs = Number(partes.ts);
-  if (!Number.isFinite(tsMs)) return false;
+  // La documentación de Mercado Pago muestra `ts` en segundos (1704908010) y
+  // hay notificaciones que lo traen en milisegundos. Se aceptan las dos: la
+  // primera versión sólo leía milisegundos, así que toda firma en segundos
+  // parecía de 1970, caía fuera de la tolerancia y respondía 401.
+  const tsNumero = Number(partes.ts);
+  if (!Number.isFinite(tsNumero)) return false;
+  const tsMs = tsNumero < 1e12 ? tsNumero * 1000 : tsNumero;
   if (Math.abs(ahoraMs - tsMs) > toleranciaSeg * 1000) return false;
 
   const esperada = await hmacSha256Hex(secreto, manifiestoFirma({ dataId, requestId: xRequestId, ts: partes.ts }));
@@ -190,7 +194,9 @@ export async function obtenerPago(accessToken: string, id: string): Promise<Pago
   });
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) {
-    throw new Error(`No se pudo consultar el pago ${id} en Mercado Pago (${respuesta.status}).`);
+    const error = new Error(`No se pudo consultar el pago ${id} en Mercado Pago (${respuesta.status}).`);
+    (error as Error & { status?: number }).status = respuesta.status;
+    throw error;
   }
   return datos as PagoMercadoPago;
 }
