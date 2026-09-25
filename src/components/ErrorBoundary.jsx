@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, RotateCcw, TriangleAlert } from 'lucide-react';
+import { esErrorDeVersionNueva, recargarUnaVez } from '../lib/versionNueva';
 
 /**
  * Límite de errores de la interfaz.
@@ -24,6 +25,8 @@ class LimiteDeError extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    // Se publicó una versión nueva con esta pestaña abierta: recargar la trae.
+    if (esErrorDeVersionNueva(error) && recargarUnaVez()) return;
     // Es el único console.error legítimo del render: algo se rompió de verdad.
     console.error('Fallo no controlado en la interfaz:', error, info?.componentStack);
   }
@@ -35,6 +38,12 @@ class LimiteDeError extends React.Component {
   }
 
   reintentar() {
+    // Una página que no se pudo bajar no se arregla volviendo a dibujar:
+    // React guarda el fallo de la carga. Sólo recargando llega la versión nueva.
+    if (esErrorDeVersionNueva(this.state.error)) {
+      window.location.reload();
+      return;
+    }
     this.setState({ error: null });
   }
 
